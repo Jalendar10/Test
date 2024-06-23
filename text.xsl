@@ -19561,7 +19561,27 @@ or $Prin_3_Mob_Phone_R4=$Prin_2_Mob_Phone or $Prin_3_Mob_Phone_R4=$Prin_3_Phone 
 				</td>					
 				<td colspan="2">
 					<input type="text" name="ptsCumCreditLim" id="ptsCumCreditLim" style="width: 170px;"/>
-				</td>            
+				</td> 
+				
+				<!-- added by JAY-->
+				<td  colspan="2" class="label_tag">
+				  <b>Debit Refund</b>
+				</td>
+				<td colspan="2">
+					<select id="DebitRefund" class="reasonDropdown">
+						<option value="Maker" selected="Maker">Maker</option>
+					<option value="Maker">
+						Maker
+					</option>
+					<option value="Root">
+						Root
+					</option>
+					<option value="Outlet">
+							Outlet
+						</option>
+					</select>
+				</td>
+				<!-- added by JAY-->
 			</tr>
 					
 				
@@ -20550,13 +20570,33 @@ or $Prin_3_Mob_Phone_R4=$Prin_2_Mob_Phone or $Prin_3_Mob_Phone_R4=$Prin_3_Phone 
 			</select>
 		</td>		
 	</tr>
-	
+							<!-- added by JAY 2-->
+	<tr>
+		<td class="label_tag" style="text-align:left;font-weight:bold;">Debit Refund</td>
+			<td>
+				<select name="fcra2" id="fcra2" width="100" style="width: 175px">
+					<option value="Maker" selected="Maker">Maker</option>
+						<option value="Maker">
+									Maker
+						</option>
+						<option value="Root">
+									Root
+						</option>
+						<option value="Outlet">
+									Outlet
+						</option>
+				</select>
+			</td>
+	</tr>
+					<!-- added by JAY-->
 
 	<tr>
+
 		<td class="label_tag" style="text-align:left;font-weight:bold;">External Comments</td>
 		<td colspan="7">
 			<textarea rows="2" cols="150" id="comment">&#x20;</textarea>
 		</td>
+		
 	</tr>
 	<tr>
 		<td colspan="8" style="text-align:center;">&#160;</td>
@@ -21201,6 +21241,104 @@ or $Prin_3_Mob_Phone_R4=$Prin_2_Mob_Phone or $Prin_3_Mob_Phone_R4=$Prin_3_Phone 
 			</select>
 		</td>
 	</tr>
+    								<!-- added by JAY 2-->
+     <script>
+                    function showTab(selectedValue) {
+                        document.getElementById('makerTab').style.display = selectedValue === 'Maker' ? 'block' : 'none';
+                        document.getElementById('rootTab').style.display = selectedValue === 'Root' ? 'block' : 'none';
+                        document.getElementById('outletTab').style.display = selectedValue === 'Outlet' ? 'block' : 'none';
+                    }
+
+                    function saveData(tabId) {
+                        // Logic to save data, can be expanded as per requirements
+                        alert('Data saved for ' + tabId);
+                    }
+    </script>
+
+				 <tr>
+                        <td class="label_tag" style="text-align:left;font-weight:bold;">Debit Refund 2</td>
+                        <td>
+                            <select name="fcra2" id="fcra2" width="100" style="width: 175px" onchange="showTab(this.value)">
+                                <option value="Maker" selected="selected">Maker 2</option>
+                                <option value="Maker">Maker</option>
+                                <option value="Root">Root</option>
+                                <option value="Outlet">Outlet</option>
+                            </select>
+                        </td>
+                    </tr>
+
+  <!-- Maker Tab (Read-only) -->
+                <div id="makerTab" style="display:block;">
+                    <table class="tabcontent">
+                        <tr>
+                            <th>Header 1</th>
+                            <th>Header 2</th>
+                            <th>Header 3</th>
+                            <th>Header 4</th>
+                        </tr>
+                        <tr>
+                            <td><xsl:value-of select="/Application/Merchant/Maker/Single_Debit_Ref_Lim_Amt"/></td>
+                            <td><xsl:value-of select="/Application/Merchant/Maker/Cum_Debit_Ref_Lim_Amt"/></td>
+                            <td><xsl:value-of select="/Application/Merchant/Maker/Temp_Single_Debit_REF_Lim_Amt"/></td>
+                            <td><xsl:value-of select="/Application/Merchant/Maker/Temp_Single_Debit_REF_Lim_ExpiryDate"/></td>
+                        </tr>
+                        <tr>
+                            <td><xsl:value-of select="/Application/Merchant/Maker/Temp_Cum_Debit_REF_Lim_Amt"/></td>
+                            <td><xsl:value-of select="/Application/Merchant/Maker/Temp_Cum_Debit_REF_Lim_ExpiryDate"/></td>
+                        </tr>
+                    </table>
+                </div>
+
+                <!-- Root Tab (Editable) -->
+                <div id="rootTab" style="display:none;">
+                    <table class="tabcontent">
+                        <tr>
+                            <th>Header 1</th>
+                            <th>Header 2</th>
+                            <th>Header 3</th>
+                            <th>Header 4</th>
+                        </tr>
+                        <tr>
+                            <td><input type="text" id="root_Single_Debit_Ref_Lim_Amt" value="{/Application/Merchant/Root/Single_Debit_Ref_Lim_Amt}"/></td>
+                            <td><input type="text" id="root_Cum_Debit_Ref_Lim_Amt" value="{/Application/Merchant/Root/Cum_Debit_Ref_Lim_Amt}"/></td>
+                            <td><input type="text" id="root_Temp_Single_Debit_REF_Lim_Amt" value="{/Application/Merchant/Root/Temp_Single_Debit_REF_Lim_Amt}"/></td>
+                            <td><input type="text" id="root_Temp_Single_Debit_REF_Lim_ExpiryDate" value="{/Application/Merchant/Root/Temp_Single_Debit_REF_Lim_ExpiryDate}"/></td>
+                        </tr>
+                        <tr>
+                            <td><input type="text" id="root_Temp_Cum_Debit_REF_Lim_Amt" value="{/Application/Merchant/Root/Temp_Cum_Debit_REF_Lim_Amt}"/></td>
+                            <td><input type="text" id="root_Temp_Cum_Debit_REF_Lim_ExpiryDate" value="{/Application/Merchant/Root/Temp_Cum_Debit_REF_Lim_ExpiryDate}"/></td>
+                        </tr>
+                    </table>
+                    <button onclick="saveData('root')">Save</button>
+                </div>
+
+                <!-- Outlet Tab (Editable) -->
+                <div id="outletTab" style="display:none;">
+                    <table class="tabcontent">
+                        <tr>
+                            <th>Header 1</th>
+                            <th>Header 2</th>
+                            <th>Header 3</th>
+                            <th>Header 4</th>
+                        </tr>
+                        <xsl:for-each select="/Application/MultipleOutlet/OutletDetails/Outlet">
+                            <tr>
+                                <td><input type="text" value="{Single_Debit_Ref_Lim_Amt}"/></td>
+                                <td><input type="text" value="{Cum_Debit_Ref_Lim_Amt}"/></td>
+                                <td><input type="text" value="{Temp_Single_Debit_REF_Lim_Amt}"/></td>
+                                <td><input type="text" value="{Temp_Single_Debit_REF_Lim_ExpiryDate}"/></td>
+                            </tr>
+                            <tr>
+                                <td><input type="text" value="{Temp_Cum_Debit_REF_Lim_Amt}"/></td>
+                                <td><input type="text" value="{Temp_Cum_Debit_REF_Lim_ExpiryDate}"/></td>
+                            </tr>
+                        </xsl:for-each>
+                    </table>
+                    <button onclick="saveData('outlet')">Save</button>
+                </div>
+
+
+												<!-- added by JAY-->
 	
 
 	<tr>
