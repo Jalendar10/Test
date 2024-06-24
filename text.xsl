@@ -2,6 +2,7 @@
 <xsl:stylesheet version="1.0" xmlns:xalan="http://xml.apache.org/xalan" exclude-result-prefixes="xalan" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:fo="http://www.w3.org/1999/XSL/Format" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:str="http://exslt.org/strings"  extension-element-prefixes="str" >
 	
 	<xsl:import href="/app_gui_items/ERCM/xsl/common.xsl"/>
+	<xsl:import href="/app_gui_items/Diligence/US/12.0/ERNF.xsl"/>
 	
 	<!-- Ramanathan modified on 09-Aug-2017 for US Boarding requirement to convert reason code to description in MATCH -->
 	<xsl:include href="Diligence_Underwriting_Alert_NEUSTAR.xsl"/>
@@ -70,23 +71,7 @@
 						$("#Credit_Summary").show();
 						console.log("Test data is : " + '<xsl:value-of select="/enrichedAlert/attributes/attribute[@property='alerts.p25']/value"/>');
 						hideStep();
-						/*EAMLoggingChanges Start*/
-						user_role = roles;
-						var startTime = performance.now()
-							action = '"user login"'
-							activity = "Alert login"
-							object_type = "screen"
-							signature = 'user audit'
-							message = "Alert login by user"
-								$('.validationCheck').find('input[type=text], select').each(function(){
-									$(this).val("")
-								})
-								var endTime = performance.now()
-							var timeTaken = ((endTime - startTime) / 1000)
-							timeTaken = Math.round(timeTaken * 1000000) / 1000000
-							duration=timeTaken
-						sendLoggingInfo()
-						/*EAMLoggingChanges End*/
+						
 					});
 
 					function hideStep()
@@ -231,6 +216,45 @@ else{
 	}, ddqParam);
 	}
 }
+	
+function AMODecisionWarning() {
+	console.log('Inside AMODecisionWarning') ;
+	var MerchantID ='<xsl:value-of select="/enrichedAlert/content/Alert/Application/Merchant/MID"/>';
+	var ddqParam = [];	
+	ddqParam[0] = ['MerchantID',MerchantID];	
+	RCMAPI.getDDQResult ('Diligence_CheckAMO_Alert_Status_DDQ', function(resultSet)
+	{   //console.log('length AMODecisionWarning-'+resultSet.getElementsByTagName('ddqRecord').length) ;
+		var ddqrow = resultSet.getElementsByTagName('ddqRecord'); 								
+		
+		for (var i = 0; i &lt; ddqrow.length ; i++){
+					var ddqColumn = ddqrow[i].getElementsByTagName('ddqItem');
+					console.log('AMODecisionWarning innerHTML-'+ ddqColumn[0].innerHTML );
+					$("#AMOAlertId").text(ddqColumn[0].innerHTML);
+					$("#AMOChain").text(ddqColumn[1].innerHTML);
+					$("#AMOUWMid").text(ddqColumn[2].innerHTML);
+					$("#AMOCreateDate").text(ddqColumn[3].innerHTML);
+					$("#AMOClosedDate").text(ddqColumn[4].innerHTML);
+					$("#AMOFinalDescn").text(ddqColumn[5].innerHTML);
+					$("#AMOPRYReasonCD").text(ddqColumn[6].innerHTML);
+					$("#AMOSECReasonCD").text(ddqColumn[7].innerHTML);
+					$("#GGNFFlag").text(ddqColumn[8].innerHTML);
+					$("#GGNFResnCD").text(ddqColumn[9].innerHTML);
+					$("#ReviewType").text(ddqColumn[10].innerHTML);
+					$("#ModlScrSeg").text(ddqColumn[11].innerHTML);
+					$("#FinalScrSeg").text(ddqColumn[12].innerHTML);
+					$("#SchNxtRWDT").text(ddqColumn[13].innerHTML);
+					$("#SchManRWDT").text(ddqColumn[14].innerHTML);
+					
+					if(ddqColumn[5].innerHTML == 'Terminate'){
+						console.log('AMODecisionWarning innerHTML-'+ ddqColumn[5].innerHTML );
+						$("#AMOCheckHidden").val(false);					
+					} else {
+						$("#AMOCheckHidden").val(true);	
+					}
+				}
+					  																																																																																				   ;
+	},ddqParam);		
+}	
 	
 </script>
 
@@ -1810,49 +1834,14 @@ $(function() {
 
  
 <script type="text/javascript">
-applicationName= "Diligence"
-UAID = "05406"
-applog = true
-src_ip = ""
-dest_ip = ""
-activity = ""
-user = ""
-app = "Diligence US"
-action = ""
-user_role = ""
-signature = ""
-message = ""
-parameters = ""
-session_id = ""
-object_type = ""
-object = ""
-duration=""
-/*EAMLoggingChanges End*/
 
 function openExcel()
 {
 	var AppID = '<xsl:value-of select ="/enrichedAlert/content/Alert/ApplicationID/"/>';
 	var MerchantID = '<xsl:value-of select="/enrichedAlert/content/Alert/Application/Merchant/MID"/>';
-    window.open("plugin?plugin=DiligenceXLDownload_ifm&amp;module=XLConverterExtensionId&amp;page=XLConverterPageId&amp;merchantID="+MerchantID+"&amp;svcType=RT");
-	/*EAMLoggingChanges Start*/
-	user = RCMAPI.user.identifier;
-	action = '"Exel sheet downloaded"'
-	var startTime = performance.now()
-		activity = '"Excel Download"'
-		object_type = "screen"
-		signature = '"user audit"'
-		message = '"Download Excel button clicked by user"'
-			$('.validationCheck').find('input[type=text], select').each(function(){
-				$(this).val("")
-			})
-			var endTime = performance.now()
-		var timeTaken = ((endTime - startTime) / 1000)
-		timeTaken = Math.round(timeTaken * 1000000) / 1000000
-		duration=timeTaken
-	//console.log("EAM logging sending logging info")
-	sendLoggingInfo()
-	//console.log("EAM logging End")
-	/*EAMLoggingChanges End*/
+	var PortfolioID = '<xsl:value-of select="/enrichedAlert/content/Alert/Application/Portfolio"/>';
+    window.open("plugin?plugin=DiligenceXLDownload_ifm&amp;module=XLConverterExtensionId&amp;page=XLConverterPageId&amp;merchantID="+MerchantID+"&amp;portfolioID="+PortfolioID+"&amp;svcType=RT");
+	
 }
 
 function openExcelVMAS()
@@ -1878,6 +1867,7 @@ function prinLoadFunction()
 		jQuery('#containerB1').show();
 		jQuery('#containerC1').show();
 		jQuery('#containerD1').show();
+		jQuery('#containerZ1').show();
 		jQuery('#containerH1').show();
 		jQuery('#containerE1').show();
 		jQuery('#containerEP1').show();
@@ -1943,6 +1933,7 @@ jQuery('.details').hide();
 			jQuery('#containerB'+c.value).show();
 			jQuery('#containerC'+c.value).show();
 			jQuery('#containerD'+c.value).show();
+			jQuery('#containerZ'+c.value).show();
 			jQuery('#containerH'+c.value).show();
 			jQuery('#containerEP'+c.value).show();
 			jQuery('#containerFP'+c.value).show();
@@ -2490,23 +2481,7 @@ function riskRecutClick(){
   localStorage.removeItem("RiskRecutUS");
   clearInterval(funky);
   RiskRecutRefresh();
-  /*EAMLoggingChanges Start*/
-	user = RCMAPI.user.identifier;
-	action = '"RiskRecut Clicked"'
-	var startTime = performance.now()
-		activity = '"Risk Recut"'
-		object_type = "screen"
-		signature = '"user audit"'
-		message = '"Risk Recut button clicked by user"'
-			$('.validationCheck').find('input[type=text], select').each(function(){
-				$(this).val("")
-			})
-			var endTime = performance.now()
-		var timeTaken = ((endTime - startTime) / 1000)
-		timeTaken = Math.round(timeTaken * 1000000) / 1000000
-		duration=timeTaken
-	sendLoggingInfo()
-  /*EAMLoggingChanges End*/
+
   document.getElementById("imgProcess").style.display = "block";
 	}
   }, 1000);
@@ -3801,23 +3776,7 @@ function validate(){
 		var postUnderwritingStep='<xsl:value-of select="/enrichedAlert/attributes/attribute[@property='alerts.p13']/value"/>';
 		var sourceSystemName='<xsl:value-of select="/enrichedAlert/content/Alert/Application/SourceSystemName"/>';
 		var applicationID='<xsl:value-of select="/enrichedAlert/content/Alert/ApplicationID"/>';
-		/*EAMLoggingChanges Start*/	
-				user = RCMAPI.user.identifier;
-				action = '"Decision submit button clicked "'
-			var startTime = performance.now()
-				activity = '"Decision submit"'
-				object_type = "screen"
-				signature = '"user audit"'
-				message = '"Decision submit button clicked by user"'
-				$('.validationCheck').find('input[type=text], select').each(function(){
-					$(this).val("")
-				})
-			var endTime = performance.now()
-			var timeTaken = ((endTime - startTime) / 1000)
-				timeTaken = Math.round(timeTaken * 1000000) / 1000000
-				duration=timeTaken
-				sendLoggingInfo()
-		/*EAMLoggingChanges End*/
+	
 		if(applicationPercentInternet > 0) {
 			if(postUnderwritingStep == 'MANUAL REVIEW') {
 				if(currentStatus === 'In Process') {
@@ -3863,6 +3822,15 @@ function validate(){
 				}
 			}
 		}
+		
+		AMODecisionWarning();
+		var AMOApproveDecision = $("#AMOCheckHidden").val();	
+				
+		if(postUnderwritingStep === 'POST UNDERWRITING' &amp;&amp; AMOApproveDecision == 'false' &amp;&amp; document.getElementById("Approve").checked){
+			alert("Cannot Approve as AML Status is Terminated");
+			return false;
+		}
+		
 		
 		/* NAU Changes */
 		/*if (NAURoutingResultfetch == true) {
@@ -5624,8 +5592,12 @@ function sendTwoWayConnectSMS(){
 				var parser = new DOMParser();
 				var doc=parser.parseFromString(res,"text/html");						
 				var scriptSource=jQuery(doc).find("#pluginSMSIdentifier")[0];
+				console.log("Script Source is:"+scriptSource.innerHTML);
 				scriptSource.innerHTML=scriptSource.innerHTML.replace(/\\"/g, "'");						
+				
 				eval(scriptSource.innerHTML.replace(/,\n}/g, "}"));
+				console.log(scriptSource.innerHTML.replace(/,\n}/g, "}"));
+
 				successfulEPMessage=merdata.JsAPI_SMSIdentifier;
 				console.log("EP Call Status"+successfulEPMessage);
 				if(successfulEPMessage=='1'){
@@ -5735,7 +5707,7 @@ function populateSMSTable(){
 
 /*Two Way Connect Script Begins */
 </script>
-<script src="app_gui_items/Diligence/common/javascript/commonLoging.js"></script>
+
 </head>
 
 <body>	
@@ -6692,9 +6664,9 @@ function populateSMSTable(){
 				<xsl:if test="/enrichedAlert/content/Alert/Application/ContractType = '1'">
 
 			<xsl:choose>
-		<xsl:when test="/enrichedAlert/content/Alert/RNF/RNF_Response/RNF_CNT > 0">
+		<xsl:when test="/enrichedAlert/content/Alert/RNF/RNF_Response/Result='Match'">
 			<td class="rightBorder" style= "color:red; font-weight:bold;" colspan="1" >
-				NO
+				No
 			</td>
 		</xsl:when>
 		<xsl:otherwise>
@@ -6749,7 +6721,7 @@ function populateSMSTable(){
 			Threat Metrix Policy Score
 		</td>
 		<td class="rightBorder" colspan="1" >
-			<xsl:value-of select="/enrichedAlert/content/Alert/Application/ThreatMatrix/WSTHRMTR/PolicyScore"/>	
+			<xsl:value-of select="/enrichedAlert/content/Alert/ThreatMetrix/ThreatMetrix_Response/Policy_Score"/>
 		</td>
 		<!-- 	  Franchise Indicator changes start
  -->
@@ -6987,7 +6959,8 @@ function populateSMSTable(){
 			Threat Metrix Policy Score
 		</td>
 		<td class="rightBorder" colspan="1" >
-			<xsl:value-of select="/enrichedAlert/content/Alert/ThreatMetrix/ThreatMetrix_Response/Policy_Score"/>	
+			<xsl:value-of select="/enrichedAlert/content/Alert/ThreatMetrix/ThreatMetrix_Response/Policy_Score"/>
+		
 		</td>
 
 		<td class="label_tag"  colspan="1">
@@ -7669,8 +7642,7 @@ function populateSMSTable(){
 			Cardholder Name
 		</td>
 		<td class="rightBorder" colspan="1" >
-			<xsl:value-of select="concat(/enrichedAlert/content/Alert/Application/CardInfo/CardholderFirstName,' ',/enrichedAlert/content/Alert/Application/CardInfo/CardholderLastName)"/>
-								
+			<xsl:value-of select="/enrichedAlert/content/Alert/Application/CardInfo/CardholderName"/>					
 		</td>
 		<td class="label_tag"  colspan="1">
 			Tin Request Code
@@ -8368,6 +8340,62 @@ function populateSMSTable(){
 		</xsl:for-each>
 	</xsl:variable>
 	<xsl:if test="not($EquipmentsCount = '')">
+	
+<tr class="sortHitDiv">
+		<td colspan="6" align="left" style="text-align:left;font-weight:bold;" id="EquipmentPaymentType">Equipment Payment Type
+		</td>							
+	</tr>
+	<tr>
+		<td id="UID" class="label_tag" colspan="1" >
+			Terminal Payment Made with Credit/Debit Card
+		</td>
+		<td class="rightBorder" colspan="1" >
+		<xsl:value-of select="/enrichedAlert/content/Alert/Application/CardInfo/TerminalPaymentMadeWithCreditDebitCard"/>
+	   </td>  
+   
+		<td class="rightBorder" colspan="1" > </td>
+		<td class="rightBorder" colspan="1" > </td>
+		<td class="rightBorder" colspan="1" > </td>
+		<td class="rightBorder" colspan="1" > </td>		
+	</tr>
+	<tr>
+		<td id="UID" class="label_tag" colspan="1" >
+			Transaction Amount
+		</td>
+		<td class="rightBorder" colspan="1" >			
+		<xsl:value-of select="/enrichedAlert/content/Alert/Application/CardInfo/AmountPaid"/>
+		</td>
+		<td class="rightBorder" colspan="1" > </td>
+		<td class="rightBorder" colspan="1" > </td>
+		<td class="rightBorder" colspan="1" > </td>
+		<td class="rightBorder" colspan="1" > </td>		
+	</tr>
+	<tr>
+		<td id="UID" class="label_tag" colspan="1" >
+			Transaction Currency
+		</td>
+		<td class="rightBorder" colspan="1" >			
+		<xsl:value-of select="/enrichedAlert/content/Alert/Application/CardInfo/CurrencyUsed"/>
+		</td>
+		<td class="rightBorder" colspan="1" > </td>
+		<td class="rightBorder" colspan="1" > </td>
+		<td class="rightBorder" colspan="1" > </td>
+		<td class="rightBorder" colspan="1" > </td>	
+	</tr>
+	<tr>
+		<td id="UID" class="label_tag" colspan="1" >
+			Card Last 4
+		</td>
+		<td class="rightBorder" colspan="1" >			
+		<xsl:value-of select="/enrichedAlert/content/Alert/Application/CardInfo/CreditCardNumber" />
+		<span id="creditCardNumber">
+			</span>
+		</td>
+		<td class="rightBorder" colspan="1" > </td>
+		<td class="rightBorder" colspan="1" > </td>
+		<td class="rightBorder" colspan="1" > </td>
+		<td class="rightBorder" colspan="1" > </td>			
+	</tr>
 		 
 	<tr class="sortHitDiv">
 			<td colspan="6" align="left" style="text-align:left;font-weight:bold;">
@@ -8600,23 +8628,23 @@ function populateSMSTable(){
 		<xsl:if test = "PullCBReport='Y' or PullCBReport='y'">				
 				<!-- <xsl:variable name="principalName" select="concat(FirstName,MiddleInitial,LastName)"/> -->
 				<xsl:variable name="principalSSN1" select="NationalID/Value"/>				
-					<xsl:for-each select="/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubRqst/Principal">	
-						<xsl:variable name="Ecount" select="position()"/>
+				<!--	<xsl:for-each select="/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubRqst/Principal">	
+						<xsl:variable name="Ecount" select="position()"/> -->
 					<!-- 	<xsl:variable name="fName" select="RequestXML/CBSubRqst/CB1stNm"/>				
 						<xsl:variable name="MName" select="RequestXML/CBSubRqst/CBMdInit"/>
 						<xsl:variable name="LName" select="RequestXML/CBSubRqst/CBLstNm"/>
 						<xsl:variable name="ExpPriName" select="concat($fName,$MName,$LName)"/> -->
-						<xsl:variable name="principalSSNExpUS1" select="/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubRqst/Principal[$Ecount]/RequestXML/CBSubRqst/CBSSno"/>									
+						<xsl:variable name="principalSSNExpUS1" select="/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubRqst/Principal[1]/RequestXML/CBSubRqst/CBSSno"/>									
 						<xsl:if test="$principalSSN1 = $principalSSNExpUS1">																	
 						
 						<!-- <xsl:if test = "$principalName=$ExpPriName">						   -->
 							<xsl:choose>
-								<xsl:when test = "/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubResp/Principal[$Ecount]/ResponseXML/BureauResultResponse/CBResult/CBScoreVectorDtls/CBSvHwkAlrtFlg='Y'">
+								<xsl:when test = "/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubResp/Principal[1]/ResponseXML/BureauResultResponse/CBResult/CBScoreVectorDtls/CBSvHwkAlrtFlg='Y'">
 									<td class="rightBorder" width="12.5%" > 
 										Yes
 									</td> 
 								</xsl:when>
-								<xsl:when test = "/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubResp/Principal[$Ecount]/ResponseXML/BureauResultResponse/CBResult/CBScoreVectorDtls/CBSvHwkAlrtFlg = 'N'">
+								<xsl:when test = "/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubResp/Principal[1]/ResponseXML/BureauResultResponse/CBResult/CBScoreVectorDtls/CBSvHwkAlrtFlg = 'N'">
 									<td class="rightBorder" width="12.5%" > 
 										No
 									</td> 
@@ -8625,8 +8653,11 @@ function populateSMSTable(){
 									<td>&#160;</td>
 								</xsl:otherwise>
 							</xsl:choose>
-						</xsl:if>				
-					</xsl:for-each>				
+						</xsl:if>	
+                        <xsl:if test="$principalSSN1 != $principalSSNExpUS1">	
+                         <td>&#160;</td>
+                        </xsl:if>					   
+								
 		</xsl:if>
     
    
@@ -8715,25 +8746,25 @@ function populateSMSTable(){
 		<xsl:if test = "PullCBReport='Y' or PullCBReport='y'">			
 			<!-- <xsl:variable name="principalNameSuspicious" select="concat(FirstName,MiddleInitial,LastName)"/>	 -->		
 			<xsl:variable name="principalSSN2" select="NationalID/Value"/>
-			<xsl:for-each select="/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubRqst/Principal">
+		<!--	<xsl:for-each select="/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubRqst/Principal"> -->
 				<!-- <xsl:variable name="fName" select="RequestXML/CBSubRqst/CB1stNm"/>				
 				<xsl:variable name="MName" select="RequestXML/CBSubRqst/CBMdInit"/>
 				<xsl:variable name="LName" select="RequestXML/CBSubRqst/CBLstNm"/>
 				<xsl:variable name="ExpPriNameSuspicious" select="concat($fName,$MName,$LName)"/>	 -->			
-				<xsl:variable name="EcountSuspicious" select="position()"/>	
+			<!--	<xsl:variable name="EcountSuspicious" select="position()"/>	-->
 				
-					<xsl:variable name="principalSSNExpUS2" select="/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubRqst/Principal[$EcountSuspicious]/RequestXML/CBSubRqst/CBSSno"/>
+					<xsl:variable name="principalSSNExpUS2" select="/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubRqst/Principal[1]/RequestXML/CBSubRqst/CBSSno"/>
 									
 					<xsl:if test="$principalSSN2 = $principalSSNExpUS2">
 				
 				<!-- <xsl:if test = "$principalNameSuspicious=$ExpPriNameSuspicious"> -->
 				    <xsl:choose>
-						<xsl:when test = "/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubResp/Principal[$EcountSuspicious]/ResponseXML/BureauResultResponse/CBResult/CBScoreVectorDtls/CBSvHwkAlrtSusFlg='Y'">
+						<xsl:when test = "/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubResp/Principal[1]/ResponseXML/BureauResultResponse/CBResult/CBScoreVectorDtls/CBSvHwkAlrtSusFlg='Y'">
 							<td class="rightBorder" width="12.5%" > 
 								Yes
 							</td> 
 						</xsl:when>
-						<xsl:when test = "/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubResp/Principal[$EcountSuspicious]/ResponseXML/BureauResultResponse/CBResult/CBScoreVectorDtls/CBSvHwkAlrtSusFlg = 'N'">
+						<xsl:when test = "/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubResp/Principal[1]/ResponseXML/BureauResultResponse/CBResult/CBScoreVectorDtls/CBSvHwkAlrtSusFlg = 'N'">
 							<td class="rightBorder" width="12.5%" > 
 								No
 							</td> 
@@ -8742,8 +8773,12 @@ function populateSMSTable(){
 							<td>&#160;</td>
 						</xsl:otherwise>
 					</xsl:choose>
-				</xsl:if>				
-			</xsl:for-each>				
+				</xsl:if>	
+                <xsl:if test="$principalSSN2 != $principalSSNExpUS2">
+				 <td>&#160;</td>
+				</xsl:if>
+				
+		<!--	</xsl:for-each>		-->		
 		</xsl:if>
 		
 		 <xsl:if test = "PullCBReport='N' or PullCBReport='n'">
@@ -8755,23 +8790,23 @@ function populateSMSTable(){
 	<td class="label_tag" width="12.5%" id="CBReportAvailable">Credit Score</td>
 		<!-- <xsl:variable name="principalNameCreditScore" select="concat(FirstName,MiddleInitial,LastName)"/> -->
 		<xsl:variable name="principalSSN4" select="NationalID/Value"/>
-		<xsl:for-each select="/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubRqst/Principal">			
-			<!-- <xsl:variable name="fName" select="RequestXML/CBSubRqst/CB1stNm"/>				
+	<!--	<xsl:for-each select="/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubRqst/Principal">			
+			 <xsl:variable name="fName" select="RequestXML/CBSubRqst/CB1stNm"/>				
 			<xsl:variable name="MName" select="RequestXML/CBSubRqst/CBMdInit"/>
 			<xsl:variable name="LName" select="RequestXML/CBSubRqst/CBLstNm"/>
-			<xsl:variable name="CSName" select="concat($fName,$MName,$LName)"/>	 -->			
-			<xsl:variable name="CreditScoreCount" select="position()"/>
+			<xsl:variable name="CSName" select="concat($fName,$MName,$LName)"/>	 			
+			<xsl:variable name="CreditScoreCount" select="position()"/> -->
 			
-			<xsl:variable name="principalSSNExpUS4" select="/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubRqst/Principal[$CreditScoreCount]/RequestXML/CBSubRqst/CBSSno"/>
+			<xsl:variable name="principalSSNExpUS4" select="/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubRqst/Principal[1]/RequestXML/CBSubRqst/CBSSno"/>
 									
 			<xsl:if test="$principalSSN4 = $principalSSNExpUS4">
 				
 			<!-- <xsl:if test = "$CSName=$principalNameCreditScore"> -->
 				<xsl:choose>
-					<xsl:when test="/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubResp/Principal[$CreditScoreCount]/ResponseXML/BureauResultResponse/CBResult/CBScoreVectorDtls/CBSvRskScr !=''">
+					<xsl:when test="/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubResp/Principal[1]/ResponseXML/BureauResultResponse/CBResult/CBScoreVectorDtls/CBSvRskScr !=''">
 					<!-- /EXPERIAN/EXPERIAN_US/CBSubResp/Principal[$CreditScoreCount]/ResponseXML/BureauResultResponse/CBResult/CBCommScoreVectorDtls/CBCSvCScore -->
 						<td class="rightBorder" width="12.5%" > 
-							<xsl:value-of select="/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubResp/Principal[$CreditScoreCount]/ResponseXML/BureauResultResponse/CBResult/CBScoreVectorDtls/CBSvRskScr"/>
+							<xsl:value-of select="/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubResp/Principal[1]/ResponseXML/BureauResultResponse/CBResult/CBScoreVectorDtls/CBSvRskScr"/>
 						<!-- EXPERIAN_US/CBSubResp/Principal[$CreditScoreCount]/ResponseXML/BureauResultResponse/CBResult/CBCommScoreVectorDtls/CBCSvCScore -->
 						</td>
 					</xsl:when>
@@ -8780,7 +8815,10 @@ function populateSMSTable(){
 					</xsl:otherwise>
 				</xsl:choose>
 			</xsl:if>	
-		</xsl:for-each>
+			<xsl:if test="$principalSSN4 != $principalSSNExpUS4">
+			<td>&#160;</td>
+			</xsl:if>
+		<!-- </xsl:for-each> -->
 	
 	<td class="label_tag" width="12.5%" id="PercentOwnership">Percent Ownership</td>
 	<xsl:for-each select="/enrichedAlert/content/Alert/Application/Principals/Principal[$count]/PercentOwnership">
@@ -8802,25 +8840,25 @@ function populateSMSTable(){
 	<xsl:if test = "PullCBReport='Y' or PullCBReport='y'">
 		<!-- <xsl:variable name="principalNameSevere" select="concat(FirstName,MiddleInitial,LastName)"/> -->
 		<xsl:variable name="principalSSN3" select="NationalID/Value"/>
-			<xsl:for-each select="/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubRqst/Principal">				
-		<!-- 		<xsl:variable name="fName" select="RequestXML/CBSubRqst/CB1stNm"/>				
+		<!-- 	<xsl:for-each select="/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubRqst/Principal">				
+				<xsl:variable name="fName" select="RequestXML/CBSubRqst/CB1stNm"/>				
 				<xsl:variable name="MName" select="RequestXML/CBSubRqst/CBMdInit"/>
 				<xsl:variable name="LName" select="RequestXML/CBSubRqst/CBLstNm"/>
-				<xsl:variable name="ExpPriNameSevere" select="concat($fName,$MName,$LName)"/> -->				
-				<xsl:variable name="EcountSevere" select="position()"/>
+				<xsl:variable name="ExpPriNameSevere" select="concat($fName,$MName,$LName)"/> 				
+				<xsl:variable name="EcountSevere" select="position()"/>  -->
 				
-				<xsl:variable name="principalSSNExpUS3" select="/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubRqst/Principal[$EcountSevere]/RequestXML/CBSubRqst/CBSSno"/>
+				<xsl:variable name="principalSSNExpUS3" select="/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubRqst/Principal[1]/RequestXML/CBSubRqst/CBSSno"/>
 									
 									<xsl:if test="$principalSSN3 = $principalSSNExpUS3">
 				
 				<!-- <xsl:if test = "$principalNameSevere=$ExpPriNameSevere"> -->				  
 					 <xsl:choose>
-						<xsl:when test = "/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubResp/Principal[$EcountSevere]/ResponseXML/BureauResultResponse/CBResult/CBScoreVectorDtls/CBSvHwkAlrtWrstFlg='Y'">
+						<xsl:when test = "/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubResp/Principal[1]/ResponseXML/BureauResultResponse/CBResult/CBScoreVectorDtls/CBSvHwkAlrtWrstFlg='Y'">
 							<td class="rightBorder" width="12.5%" > 
 								Yes
 							</td> 
 						</xsl:when>
-						<xsl:when test = "/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubResp/Principal[$EcountSevere]/ResponseXML/BureauResultResponse/CBResult/CBScoreVectorDtls/CBSvHwkAlrtWrstFlg = 'N'">
+						<xsl:when test = "/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubResp/Principal[1]/ResponseXML/BureauResultResponse/CBResult/CBScoreVectorDtls/CBSvHwkAlrtWrstFlg = 'N'">
 							<td class="rightBorder" width="12.5%" > 
 								No
 							</td> 
@@ -8829,8 +8867,11 @@ function populateSMSTable(){
 							<td>&#160;</td>
 						</xsl:otherwise>
 					</xsl:choose>				  
-				</xsl:if>				
-			</xsl:for-each>				
+				</xsl:if>	
+                 <xsl:if test="$principalSSN3 != $principalSSNExpUS3">
+				 <td>&#160;</td>
+				</xsl:if>
+		<!--	</xsl:for-each>		-->		
 	</xsl:if>
 		
 	 <xsl:if test = "PullCBReport='N' or PullCBReport='n'">
@@ -8866,7 +8907,7 @@ function populateSMSTable(){
 	</xsl:for-each> -->
 	<td class="label_tag" width="12.5%" id="CBScore">Number of PC Inquiries</td>
 	<xsl:variable name="principalNamePCInquiries" select="concat(FirstName,MiddleInitial,LastName)"/>
-		 <xsl:for-each select="/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubRqst/Principal">			
+		<!--  <xsl:for-each select="/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubRqst/Principal">	-->		
 			<xsl:variable name="fName" select="RequestXML/CBSubRqst/CB1stNm"/>				
 			<xsl:variable name="MName" select="RequestXML/CBSubRqst/CBMdInit"/>
 			<xsl:variable name="LName" select="RequestXML/CBSubRqst/CBLstNm"/>
@@ -8874,17 +8915,20 @@ function populateSMSTable(){
 			<xsl:variable name="PCInquiriesCount" select="position()"/>		
 				<xsl:if test = "$PCIName=$principalNamePCInquiries">
 					<xsl:choose>
-						<xsl:when test="/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubResp/Principal[$PCInquiriesCount]/ResponseXML/BureauResultResponse/CBResult/CBScoreVectorDtls/CBSvAllInq !=''">
+						<xsl:when test="/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubResp/Principal[1]/ResponseXML/BureauResultResponse/CBResult/CBScoreVectorDtls/CBSvAllInq !=''">
 							<td class="rightBorder" width="12.5%" > 
-								<xsl:value-of select="/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubResp/Principal[$PCInquiriesCount]/ResponseXML/BureauResultResponse/CBResult/CBScoreVectorDtls/CBSvAllInq"/>
+								<xsl:value-of select="/enrichedAlert/content/Alert/EXPERIAN/EXPERIAN_US/CBSubResp/Principal[1]/ResponseXML/BureauResultResponse/CBResult/CBScoreVectorDtls/CBSvAllInq"/>
 							</td>
 						</xsl:when>
 						<xsl:otherwise>
 							<td>&#160;</td>
 						</xsl:otherwise>
 					</xsl:choose>
-				</xsl:if>	
-		 </xsl:for-each>
+				</xsl:if>
+                <xsl:if test = "$PCIName != $principalNamePCInquiries">
+                     <td>&#160;</td>				
+                </xsl:if>				
+		<!-- </xsl:for-each> -->
 		 
 		 <td class="label_tag" width="12.5%" id="FrozenBureauIndicator">Frozen Bureau Indicator</td> 
 		 <td class="rightBorder" width="12.5%" > 
@@ -8892,6 +8936,26 @@ function populateSMSTable(){
 							</td>
 </tr>
 </xsl:for-each>
+
+<xsl:for-each select="/enrichedAlert/content/Alert/Application/Principals/Principal">
+<xsl:variable name="count" select="position()"/>
+<tr class="details">
+<xsl:attribute name="id">
+<xsl:value-of select="concat('containerZ',$count)" />
+</xsl:attribute>
+	<td class="label_tag" width="12.5%" id="PhoneVerificationStatus">Phone1 Verification Status</td>
+	<td class="rightBorder" width="12.5%">
+	<xsl:value-of select="/enrichedAlert/content/Alert/Application/Principals/Principal[$count]/NEUSTAR/PRI_ACCT_SMS_PHONE1_VAL" />
+	</td><td class="label_tag" width="12.5%" id="PhoneVerificationStatus">Phone2 Verification Status</td> 
+		 <td class="rightBorder" width="12.5%" > 
+		<xsl:value-of select="/enrichedAlert/content/Alert/Application/Principals/Principal[$count]/NEUSTAR/PRI_ACCT_SMS_PHONE1_VAL" />
+							</td>
+
+	<td class="label_tag" width="12.5%"></td>
+	<td class="rightBorder" width="12.5%"></td>
+</tr>
+</xsl:for-each>
+
 </table>
 
 <table width="100%" >
@@ -9239,9 +9303,14 @@ function populateSMSTable(){
 	  <li>
 <a href="#" class="subtablinks" onclick="gnfFunction();openSubTab(this, 'NegativeTab', 'Negative_Screening', 'GNFTab')" id="gnftablinkID" style="width:130px;">GNF</a>
 </li>
-	  <li>
+<li>
 <a href="#" class="subtablinks"  onclick="openSubTab(this,'NegativeTab','Negative_Screening','RNFTab')" style="width:130px;" id="restrictedName">RNF</a>
 </li>
+
+<li>
+<a href="#ERNF" class="subtablinks" onclick="openSubTab(this,'NegativeTab','Negative_Screening','ERNFTab'); " id="ERNF" style="width:130px;">Enhanced RNF</a>
+</li>
+
 	  <li>
 <a href="#" class="subtablinks" onclick="matchTabClick();openSubTab(this, 'NegativeTab', 'Negative_Screening', 'MATCHTab')" style="width:130px;" id="mastercardMatch">MATCH</a>
 </li>
@@ -9993,6 +10062,10 @@ function populateSMSTable(){
 
 	</xsl:if>
 	</div>
+	
+<div id="ERNFTab" class="subtabcontent" style="width:100%;">
+   <xsl:call-template name="ERNF" />
+</div>
 		
 	<div id="RNFTab" class="subtabcontent" style="width:100%;">
 		<table width="100%" class="clsGridTableBase pluginDataTable">
@@ -13661,7 +13734,7 @@ or $Prin_3_Mob_Phone_R4=$Prin_2_Mob_Phone or $Prin_3_Mob_Phone_R4=$Prin_3_Phone 
 	</div>
 	
 	<div id="MATCHTab" class="subtabcontent" style="width:99%;">
-	<table width="100%" class="clsGridTableBase pluginDataTable">
+		<table width="100%" class="clsGridTableBase pluginDataTable">
 	<xsl:if test= "/enrichedAlert/content/Alert/MATCH/REALTIME/MATCH_RT_Response/Result = 'Not Available'" >
 		<tr>
 			<td class="label_tag" style="text-align:center;">
@@ -13673,14 +13746,14 @@ or $Prin_3_Mob_Phone_R4=$Prin_2_Mob_Phone or $Prin_3_Mob_Phone_R4=$Prin_3_Phone 
 	</xsl:if>
 	<xsl:if test= "/enrichedAlert/content/Alert/MATCH/REALTIME/MATCH_RT_Response/Result = 'NO MATCH'" >
 		<tr>
-			<td class="label_tag" style="text-align:center;">				
+			<td class="label_tag" style="text-align:center;" colspan="8">				
 				<h3>No Match Found</h3>
 			</td>
 		</tr>
 	</xsl:if>
 	<xsl:if test= "/enrichedAlert/content/Alert/MATCH/REALTIME/MATCH_RT_Response/Result = 'No Match'" >
 		<tr>
-			<td colspan="8" class="label_tag" style="text-align:center;">				
+			<td class="label_tag" style="text-align:center;" colspan="8">				
 				<h3>No Match Found</h3>
 			</td>
 		</tr>
@@ -13690,7 +13763,7 @@ or $Prin_3_Mob_Phone_R4=$Prin_2_Mob_Phone or $Prin_3_Mob_Phone_R4=$Prin_3_Phone 
 		<tr>
 			<tbody>
 				<tr style="background-color: #84AEE7;">
-					<td colspan="8" align="left" style="text-align:left;font-weight:bold;" id="ActualMatchBTResponseTotalLength" width="100%"> Actual Match Batch Response   Total Length : <xsl:value-of select="/enrichedAlert/content/Alert/MATCH/REALTIME/MATCH_RT_Response/PossibleMerchantMatches/TotalLength"/>
+					<td colspan="8" align="left" style="text-align:left;font-weight:bold;" id="ActualMatchBTResponseTotalLength" width="100%"> Actual Match  Response   Total Length : <xsl:value-of select="/enrichedAlert/content/Alert/MATCH/REALTIME/MATCH_RT_Response/PossibleMerchantMatches/TotalLength"/>
 					</td>							
 				</tr>
 				<tr>
@@ -13816,9 +13889,59 @@ or $Prin_3_Mob_Phone_R4=$Prin_2_Mob_Phone or $Prin_3_Mob_Phone_R4=$Prin_3_Phone 
 											<tr>
 												<td class="label_tag MerchantMatchID">Address</td>
 												<td>
+												<xsl:choose>
+												<!-->Changed address fields for Canada Implementation<-->
+												<xsl:when test="/enrichedAlert/content/Alert/Application/Portfolio='1001001'">
+												<xsl:choose>
+			<xsl:when test="/enrichedAlert/content/Alert/Application/Merchant/TradingAddress/ApartmentNo!= ''">
+			 <xsl:value-of select="/enrichedAlert/content/Alert/Application/Merchant/TradingAddress/ApartmentNo"/>&#160;
+			</xsl:when>
+												<xsl:otherwise>
+												</xsl:otherwise>
+												</xsl:choose>
+													<xsl:choose>
+			<xsl:when test="/enrichedAlert/content/Alert/Application/Merchant/TradingAddress/BuildingNo!= ''">
+			 <xsl:value-of select="/enrichedAlert/content/Alert/Application/Merchant/TradingAddress/BuildingNo"/>&#160;
+			</xsl:when>
+												<xsl:otherwise>
+												</xsl:otherwise>
+												</xsl:choose>
+												<xsl:choose>
+			<xsl:when test="/enrichedAlert/content/Alert/Application/Merchant/TradingAddress/BuildingName!= ''">
+			 <xsl:value-of select="/enrichedAlert/content/Alert/Application/Merchant/TradingAddress/BuildingName"/>&#160;
+			</xsl:when>
+												<xsl:otherwise>
+												</xsl:otherwise>
+												</xsl:choose>
+												    <xsl:value-of select="/enrichedAlert/content/Alert/Application/Merchant/TradingAddress/Line1"/>&#160;
+													
+													<xsl:choose>
+			<xsl:when test="/enrichedAlert/content/Alert/Application/Merchant/TradingAddress/Line2!= ''">
+			 <xsl:value-of select="/enrichedAlert/content/Alert/Application/Merchant/TradingAddress/Line2"/>&#160;
+			</xsl:when>
+												<xsl:otherwise>
+												</xsl:otherwise>
+												</xsl:choose>
+													
+													
+													<xsl:choose>
+			<xsl:when test="/enrichedAlert/content/Alert/Application/Merchant/TradingAddress/Line3!= ''">
+			 <xsl:value-of select="/enrichedAlert/content/Alert/Application/Merchant/TradingAddress/Line3"/>&#160;
+			</xsl:when>
+												<xsl:otherwise>
+												</xsl:otherwise>
+												</xsl:choose>
+													<xsl:value-of select="/enrichedAlert/content/Alert/Application/Merchant/TradingAddress/City"/>&#160;
+													<xsl:value-of select="/enrichedAlert/content/Alert/Application/Merchant/TradingAddress/State"/>&#160;
+													<xsl:value-of select="/enrichedAlert/content/Alert/Application/Merchant/TradingAddress/CountryCode"/>&#160;
+													<xsl:value-of select="/enrichedAlert/content/Alert/Application/Merchant/TradingAddress/PostalCode"/>
+												</xsl:when>
+												<xsl:otherwise>
 													<xsl:value-of select="/enrichedAlert/content/Alert/Application/Merchant/BillingAddress/Line1"/>&#160;
 													<xsl:value-of select="/enrichedAlert/content/Alert/Application/Merchant/BillingAddress/Line2"/>&#160;
 													<xsl:value-of select="/enrichedAlert/content/Alert/Application/Merchant/BillingAddress/Line3"/>
+												</xsl:otherwise>
+												</xsl:choose>
 												</td>
 												<!--<td>
 <xsl:value-of select="/enrichedAlert/content/Alert/MATCH/REALTIME/MATCH_RT_Response/FilteredMerchantMatches/MerchantMatch[$count]/Address/Flag"/>
@@ -13864,7 +13987,15 @@ or $Prin_3_Mob_Phone_R4=$Prin_2_Mob_Phone or $Prin_3_Mob_Phone_R4=$Prin_3_Phone 
 											<tr>
 												<td class="label_tag MerchantMatchID">Zipcode</td>
 												<td>
+												<xsl:choose>
+												<!-->Changed address fields for Canada Implementation<-->
+												<xsl:when test="/enrichedAlert/content/Alert/Application/Portfolio='1001001'">
+												    <xsl:value-of select="/enrichedAlert/content/Alert/Application/Merchant/TradingAddress/PostalCode"/>
+												</xsl:when>
+												<xsl:otherwise>
 													<xsl:value-of select="/enrichedAlert/content/Alert/Application/Merchant/BillingAddress/PostalCode"/>
+												</xsl:otherwise>
+												</xsl:choose>
 												</td>
 												<!--<td>
 <xsl:value-of select="/enrichedAlert/content/Alert/MATCH/REALTIME/MATCH_RT_Response/FilteredMerchantMatches/MerchantMatch[$count]/PostalCode/Flag"/>
@@ -13886,7 +14017,15 @@ or $Prin_3_Mob_Phone_R4=$Prin_2_Mob_Phone or $Prin_3_Mob_Phone_R4=$Prin_3_Phone 
 											<tr>
 												<td class="label_tag MerchantMatchID">Phone Number</td>
 												<td>
+												<xsl:choose>
+												<!-->Changed address fields for Canada Implementation<-->
+												<xsl:when test="/enrichedAlert/content/Alert/Application/Portfolio='1001001'">
+												    <xsl:value-of select="/enrichedAlert/content/Alert/Application/Merchant/TradingAddress/PhoneNo"/>
+												</xsl:when>
+												<xsl:otherwise>
 													<xsl:value-of select="/enrichedAlert/content/Alert/Application/Merchant/BillingAddress/PhoneNo"/>
+												</xsl:otherwise>
+												</xsl:choose>
 												</td>
 												<!--<td>
 <xsl:value-of select="/enrichedAlert/content/Alert/MATCH/REALTIME/MATCH_RT_Response/FilteredMerchantMatches/MerchantMatch[$count]/PhoneNumber/Flag"/>
@@ -13908,7 +14047,15 @@ or $Prin_3_Mob_Phone_R4=$Prin_2_Mob_Phone or $Prin_3_Mob_Phone_R4=$Prin_3_Phone 
 											<tr>
 												<td class="label_tag MerchantMatchID">Alternate Phone Number</td>
 												<td>
-													<xsl:value-of select="NTA"/>
+													<xsl:choose>
+												<!-->Changed address fields for Canada Implementation<-->
+												<xsl:when test="/enrichedAlert/content/Alert/Application/Portfolio='1001001'">
+												    <xsl:value-of select="/enrichedAlert/content/Alert/Application/Merchant/BillingAddress/PhoneNo"/>
+												</xsl:when>
+												<xsl:otherwise>
+													<xsl:value-of select="/enrichedAlert/content/Alert/Application/Merchant/TradingAddress/PhoneNo"/>
+												</xsl:otherwise>
+												</xsl:choose>
 												</td>
 												<!--
 												<td>
@@ -13969,9 +14116,53 @@ or $Prin_3_Mob_Phone_R4=$Prin_2_Mob_Phone or $Prin_3_Mob_Phone_R4=$Prin_3_Phone 
 												</td>
 												-->
 												<td>													
-														<xsl:value-of select="/enrichedAlert/content/Alert/MATCH/REALTIME/MATCH_RT_Response/FilteredMerchantMatches/MerchantMatch/TerminatedReason/Value"/>												
+														<xsl:value-of select="/enrichedAlert/content/Alert/MATCH/REALTIME/MATCH_RT_Response/FilteredMerchantMatches/MerchantMatch[$count]/TerminatedReason/Value"/>												
 												</td>
 											</tr>	
+											
+											<tr>
+											    <td class="label_tag MerchantMatchID">Merchant URL</td>
+												<td class="rightBorder" colspan="1" >
+														<xsl:variable name="MerchantURL" select="/enrichedAlert/content/Alert/Application/Merchant/Web"/>
+		
+												<xsl:choose>
+												<xsl:when test="contains($MerchantURL, 'https:') or contains($MerchantURL, 'http:')">
+														<xsl:element name="a">
+															<xsl:attribute name="href">
+																<xsl:value-of select="/enrichedAlert/content/Alert/Application/Merchant/Web"/>
+															</xsl:attribute>
+															<xsl:attribute name="target">_blank</xsl:attribute>
+															<xsl:value-of select="/enrichedAlert/content/Alert/Application/Merchant/Web"/>
+														</xsl:element>	
+														</xsl:when>
+													
+													<xsl:otherwise>
+														<xsl:element name="a">
+															<xsl:attribute name="href">
+																<xsl:value-of select="concat('http://',/enrichedAlert/content/Alert/Application/Merchant/Web)"/>
+															</xsl:attribute>
+															<xsl:attribute name="target">_blank</xsl:attribute>
+															<xsl:value-of select="/enrichedAlert/content/Alert/Application/Merchant/Web"/>
+														</xsl:element>	
+													
+													</xsl:otherwise>
+													</xsl:choose>
+												</td>
+												<td> 
+												
+												<xsl:choose>
+														<xsl:when test="/enrichedAlert/content/Alert/MATCH/REALTIME/MATCH_RT_Response/FilteredMerchantMatches/MerchantMatch[$count]/URL/Flag='1'">
+															<b class="starred">
+<xsl:value-of select="/enrichedAlert/content/Alert/MATCH/REALTIME/MATCH_RT_Response/FilteredMerchantMatches/MerchantMatch[$count]/URL/Value"/>
+</b>
+														</xsl:when>
+														<xsl:otherwise>
+															<xsl:value-of select="/enrichedAlert/content/Alert/MATCH/REALTIME/MATCH_RT_Response/FilteredMerchantMatches/MerchantMatch[$count]/URL/Value"/>
+														</xsl:otherwise>
+													</xsl:choose>
+												
+												</td>
+											</tr>
 										
 											<tr>
 											<xsl:if test= "/enrichedAlert/content/Alert/MATCH/REALTIME/MATCH_RT_Response/FilteredMerchantMatches/MerchantMatch[$count]/PrincipalMatch" >
@@ -14057,8 +14248,52 @@ or $Prin_3_Mob_Phone_R4=$Prin_2_Mob_Phone or $Prin_3_Mob_Phone_R4=$Prin_3_Phone 
 												<td class="label_tag MerchantMatchID">Principal Address</td>
 												<td class="principal_td">
 													<!--<xsl:value-of select="concat(/enrichedAlert/content/Alert/Application/Field[@Type='UDT']/Field[@Name='Principals']/Field[@Name='Principal']/Record[$countPReq]/Field[@Name='Address']/Field[@Name='Line1']/@Value, ' ',/enrichedAlert/content/Alert/Application/Field[@Type='UDT']/Field[@Name='Principals']/Field[@Name='Principal']/Record[$countPReq]/Field[@Name='Address']/Field[@Name='Line2']/@Value"/>-->
-													<xsl:value-of select="concat(/enrichedAlert/content/Alert/Application/Principals/Principal[$countPReq]/Address/Line1, ' ',/enrichedAlert/content/Alert/Application/Principals/Principal[$countPReq]/Address/Line2,' '
-													,/enrichedAlert/content/Alert/Application/Principals/Principal[$countPReq]/Address/Line3)"/>
+													
+													<xsl:choose>
+			<xsl:when test="/enrichedAlert/content/Alert/Application/Principals/Principal[$countPReq]/Address/ApartmentNo!= ''">
+			 <xsl:value-of select="/enrichedAlert/content/Alert/Application/Principals/Principal[$countPReq]/Address/ApartmentNo"/>&#160;
+			</xsl:when>
+												<xsl:otherwise>
+												</xsl:otherwise>
+												</xsl:choose>
+													<xsl:choose>
+			<xsl:when test="/enrichedAlert/content/Alert/Application/Principals/Principal[$countPReq]/Address/BuildingNo!= ''">
+			 <xsl:value-of select="/enrichedAlert/content/Alert/Application/Principals/Principal[$countPReq]/Address/BuildingNo"/>&#160;
+			</xsl:when>
+												<xsl:otherwise>
+												</xsl:otherwise>
+												</xsl:choose>
+												<xsl:choose>
+			<xsl:when test="/enrichedAlert/content/Alert/Application/Principals/Principal[$countPReq]/Address/BuildingName!= ''">
+			 <xsl:value-of select="/enrichedAlert/content/Alert/Application/Principals/Principal[$countPReq]/Address/BuildingName"/>&#160;
+			</xsl:when>
+												<xsl:otherwise>
+												</xsl:otherwise>
+												</xsl:choose>
+													
+													
+													 <xsl:value-of select="/enrichedAlert/content/Alert/Application/Principals/Principal[$countPReq]/Address/Line1"/>&#160;
+													<xsl:choose>
+			<xsl:when test="/enrichedAlert/content/Alert/Application/Principals/Principal[$countPReq]/Address/Line2!= ''">
+			 <xsl:value-of select="/enrichedAlert/content/Alert/Application/Principals/Principal[$countPReq]/Address/Line2"/>&#160;
+			</xsl:when>
+												<xsl:otherwise>
+												</xsl:otherwise>
+												</xsl:choose>
+													<xsl:choose>
+			<xsl:when test="/enrichedAlert/content/Alert/Application/Principals/Principal[$countPReq]/Address/Line3!= ''">
+			 <xsl:value-of select="/enrichedAlert/content/Alert/Application/Principals/Principal[$countPReq]/Address/Line3"/>&#160;
+			</xsl:when>
+												<xsl:otherwise>
+												</xsl:otherwise>
+												</xsl:choose>
+													 <xsl:value-of select="/enrichedAlert/content/Alert/Application/Principals/Principal[$countPReq]/Address/City"/>&#160;
+													 <xsl:value-of select="/enrichedAlert/content/Alert/Application/Principals/Principal[$countPReq]/Address/State"/>&#160;
+													 <xsl:value-of select="/enrichedAlert/content/Alert/Application/Principals/Principal[$countPReq]/Address/CountryCode"/>&#160;
+													  <xsl:value-of select="/enrichedAlert/content/Alert/Application/Principals/Principal[$countPReq]/Address/PostalCode"/>&#160;
+													<!--<xsl:value-of select="concat(/enrichedAlert/content/Alert/Application/Principals/Principal[$countPReq]/Address/Line1, ' ',/enrichedAlert/content/Alert/Application/Principals/Principal[$countPReq]/Address/Line2,' '
+													,/enrichedAlert/content/Alert/Application/Principals/Principal[$countPReq]/Address/Line3,' ', /enrichedAlert/content/Alert/Application/Principals/Principal[$countPReq]/Address/City ,' ', /enrichedAlert/content/Alert/Application/Principals/Principal[$countPReq]/Address/State ,' ' ,/enrichedAlert/content/Alert/Application/Principals/Principal[$countPReq]/Address/CountryCode ,' ', /enrichedAlert/content/Alert/Application/Principals/Principal[$countPReq]/Address/PostalCode)"/>
+												-->
 												</td>												
 											</tr>
 											<tr>
@@ -14083,7 +14318,8 @@ or $Prin_3_Mob_Phone_R4=$Prin_2_Mob_Phone or $Prin_3_Mob_Phone_R4=$Prin_3_Phone 
 											<tr>
 												<td class="label_tag MerchantMatchID">Principal Alternate Phone Number </td>
 												<td class="principal_td">
-													<xsl:value-of select = "/enrichedAlert/content/Alert/Application/Field[@Type='UDT']/Field[@Name='Principals']/Field[@Name='Principal']/Record[$countPReq]/Field[@Name='Address']/Field[@Name='PhoneNo']/@Value"/>
+													<!--<xsl:value-of select = "/enrichedAlert/content/Alert/Application/Field[@Type='UDT']/Field[@Name='Principals']/Field[@Name='Principal']/Record[$countPReq]/Field[@Name='Address']/Field[@Name='PhoneNo']/@Value"/>-->
+												<xsl:value-of select = "/enrichedAlert/content/Alert/Application/Principals/Principal[$countPReq]/Address/MobPhoneNo"/>
 												</td>												
 											</tr>
 
@@ -14146,7 +14382,7 @@ or $Prin_3_Mob_Phone_R4=$Prin_2_Mob_Phone or $Prin_3_Mob_Phone_R4=$Prin_3_Phone 
 										</td>
 										</tr>	
 										<tr>
-										<td colspan="2">
+										<!--<td colspan="2" style="vertical-align:top">-->
 										<tbody>
 										<tr>										
 										<!--<td width="10%" class="label_tag">Match Type</td>-->
@@ -14305,7 +14541,7 @@ or $Prin_3_Mob_Phone_R4=$Prin_2_Mob_Phone or $Prin_3_Mob_Phone_R4=$Prin_3_Phone 
 									</xsl:if>	
 										
 									</tbody>	
-										</td>
+										<!--</td>-->
 		
 										</tr>
 										<!--End-->
@@ -19561,27 +19797,7 @@ or $Prin_3_Mob_Phone_R4=$Prin_2_Mob_Phone or $Prin_3_Mob_Phone_R4=$Prin_3_Phone 
 				</td>					
 				<td colspan="2">
 					<input type="text" name="ptsCumCreditLim" id="ptsCumCreditLim" style="width: 170px;"/>
-				</td> 
-				
-				<!-- added by JAY-->
-				<td  colspan="2" class="label_tag">
-				  <b>Debit Refund</b>
-				</td>
-				<td colspan="2">
-					<select id="DebitRefund" class="reasonDropdown">
-						<option value="Maker" selected="Maker">Maker</option>
-					<option value="Maker">
-						Maker
-					</option>
-					<option value="Root">
-						Root
-					</option>
-					<option value="Outlet">
-							Outlet
-						</option>
-					</select>
-				</td>
-				<!-- added by JAY-->
+				</td>            
 			</tr>
 					
 				
@@ -19775,6 +19991,140 @@ or $Prin_3_Mob_Phone_R4=$Prin_2_Mob_Phone or $Prin_3_Mob_Phone_R4=$Prin_3_Phone 
 					</td>					
 				</tr>
 			</table>
+			
+			<table width="100%" class="clsGridTableBase pluginDataTable">
+				<tr class="sortHitDiv">
+					<td colspan="12" align="left" style="text-align:left;font-weight:bold;" id="negativeChecks">
+						<span  class="expand1">-</span>AML Details</td>
+					
+				</tr>
+				
+				
+				<tr>
+					
+
+					<td width="8%" class="label_tag" >
+						<b>AMO Alert ID</b>
+					</td>
+					<td id="AMOAlertId">
+					
+					</td>	
+					<td width="8%" class="label_tag" >
+						<b>AMO Chain ID</b>
+					</td>
+				    <td id="AMOChain">
+				
+					</td>
+								
+				</tr>
+				<tr>
+										
+					<td width="8%" class="label_tag" >
+						<b>AMO Underwriting MID</b>
+					</td>
+				    <td id="AMOUWMid">
+					
+					</td>
+
+					<td width="8%" class="label_tag" >
+						<b>AMO Alert Create Date</b>
+					</td>
+				    <td id="AMOCreateDate">
+					
+					</td>
+								
+				</tr>
+				<tr>
+					<td width="8%" class="label_tag" >
+						<b>AMO Alert Closed Date</b>
+					</td>
+					<td id="AMOClosedDate">
+					
+					</td>	
+					<td width="8%" class="label_tag" >
+						<b>AMO Alert Final Decision</b>
+					</td>
+					<td id="AMOFinalDescn">
+					
+					</td>
+								
+				</tr>
+				<tr>
+					<td width="8%" class="label_tag" >
+						<b>AMO Primary Reason Code</b>
+					</td>
+					<td id="AMOPRYReasonCD">
+					
+					</td>	
+					<td width="8%" class="label_tag" >
+						<b>AMO Secondary Reason Code</b>
+					</td>
+					<td id="AMOSECReasonCD">
+					
+					</td>
+								
+				</tr>
+				<tr>
+						
+					<td width="8%" class="label_tag" >
+						<b>GGNF Flag</b>
+					</td>
+					<td id="GGNFFlag">
+					
+					</td>
+					<td width="8%" class="label_tag" >
+						<b>GGNF Reason Code</b>
+					</td>
+					<td id="GGNFResnCD">
+					
+					</td>	
+								
+				</tr>
+				<tr>
+					
+					<td width="8%" class="label_tag" >
+						<b>Review Type</b>
+					</td>
+					<td id="ReviewType">
+					
+					</td>
+					<td width="8%" class="label_tag" >
+						<b>Model Score Segment</b>
+					</td>
+					<td id="ModlScrSeg">
+					
+					</td>
+								
+				</tr>
+				<tr>
+						
+					<td width="8%" class="label_tag" >
+						<b>Final Score Segment</b>
+					</td>
+					<td id="FinalScrSeg">
+					
+					</td>
+					<td width="8%" class="label_tag" >
+						<b>Scheduled Next Review Date</b>
+					</td>
+					<td id="SchNxtRWDT">
+					
+					</td>	
+								
+				</tr>
+				<tr>
+					
+					<td width="8%" class="label_tag" >
+						<b>Scheduled Manual Review Date</b>
+					</td>
+					<td id="SchManRWDT">
+					
+					</td>
+								
+				</tr>
+				
+			</table>
+			
 		</xsl:otherwise>	
 		</xsl:choose>
 		
@@ -20568,35 +20918,20 @@ or $Prin_3_Mob_Phone_R4=$Prin_2_Mob_Phone or $Prin_3_Mob_Phone_R4=$Prin_3_Phone 
 						No
 					</option>
 			</select>
-		</td>		
+		</td>	
+	
 	</tr>
-							<!-- added by JAY 2-->
-	<tr>
-		<td class="label_tag" style="text-align:left;font-weight:bold;">Debit Refund</td>
-			<td>
-				<select name="fcra2" id="fcra2" width="100" style="width: 175px">
-					<option value="Maker" selected="Maker">Maker</option>
-						<option value="Maker">
-									Maker
-						</option>
-						<option value="Root">
-									Root
-						</option>
-						<option value="Outlet">
-									Outlet
-						</option>
-				</select>
-			</td>
-	</tr>
-					<!-- added by JAY-->
+	<!-- Added by JAY-->
+
+
+	<!-- Added by JAY-->
+	
 
 	<tr>
-
 		<td class="label_tag" style="text-align:left;font-weight:bold;">External Comments</td>
 		<td colspan="7">
 			<textarea rows="2" cols="150" id="comment">&#x20;</textarea>
 		</td>
-		
 	</tr>
 	<tr>
 		<td colspan="8" style="text-align:center;">&#160;</td>
@@ -20633,6 +20968,10 @@ or $Prin_3_Mob_Phone_R4=$Prin_2_Mob_Phone or $Prin_3_Mob_Phone_R4=$Prin_3_Phone 
 		</td>
 		
 	</tr>
+	<!-- Added by jay-->
+
+
+	<!-- Added by Jay-->
 	<tr>
 		<td colspan="6">
 			<xsl:value-of select="/enrichedAlert/content/Alert/Application/SalesmanDetails/Remarks"/>
@@ -21241,104 +21580,12 @@ or $Prin_3_Mob_Phone_R4=$Prin_2_Mob_Phone or $Prin_3_Mob_Phone_R4=$Prin_3_Phone 
 			</select>
 		</td>
 	</tr>
-    								<!-- added by JAY 2-->
-     <script>
-                    function showTab(selectedValue) {
-                        document.getElementById('makerTab').style.display = selectedValue === 'Maker' ? 'block' : 'none';
-                        document.getElementById('rootTab').style.display = selectedValue === 'Root' ? 'block' : 'none';
-                        document.getElementById('outletTab').style.display = selectedValue === 'Outlet' ? 'block' : 'none';
-                    }
+    	<!-- Added by JAY-->
 
-                    function saveData(tabId) {
-                        // Logic to save data, can be expanded as per requirements
-                        alert('Data saved for ' + tabId);
-                    }
-    </script>
+    
+        
 
-				 <tr>
-                        <td class="label_tag" style="text-align:left;font-weight:bold;">Debit Refund 2</td>
-                        <td>
-                            <select name="fcra2" id="fcra2" width="100" style="width: 175px" onchange="showTab(this.value)">
-                                <option value="Maker" selected="selected">Maker 2</option>
-                                <option value="Maker">Maker</option>
-                                <option value="Root">Root</option>
-                                <option value="Outlet">Outlet</option>
-                            </select>
-                        </td>
-                    </tr>
-
-  <!-- Maker Tab (Read-only) -->
-                <div id="makerTab" style="display:block;">
-                    <table class="tabcontent">
-                        <tr>
-                            <th>Header 1</th>
-                            <th>Header 2</th>
-                            <th>Header 3</th>
-                            <th>Header 4</th>
-                        </tr>
-                        <tr>
-                            <td><xsl:value-of select="/Application/Merchant/Maker/Single_Debit_Ref_Lim_Amt"/></td>
-                            <td><xsl:value-of select="/Application/Merchant/Maker/Cum_Debit_Ref_Lim_Amt"/></td>
-                            <td><xsl:value-of select="/Application/Merchant/Maker/Temp_Single_Debit_REF_Lim_Amt"/></td>
-                            <td><xsl:value-of select="/Application/Merchant/Maker/Temp_Single_Debit_REF_Lim_ExpiryDate"/></td>
-                        </tr>
-                        <tr>
-                            <td><xsl:value-of select="/Application/Merchant/Maker/Temp_Cum_Debit_REF_Lim_Amt"/></td>
-                            <td><xsl:value-of select="/Application/Merchant/Maker/Temp_Cum_Debit_REF_Lim_ExpiryDate"/></td>
-                        </tr>
-                    </table>
-                </div>
-
-                <!-- Root Tab (Editable) -->
-                <div id="rootTab" style="display:none;">
-                    <table class="tabcontent">
-                        <tr>
-                            <th>Header 1</th>
-                            <th>Header 2</th>
-                            <th>Header 3</th>
-                            <th>Header 4</th>
-                        </tr>
-                        <tr>
-                            <td><input type="text" id="root_Single_Debit_Ref_Lim_Amt" value="{/Application/Merchant/Root/Single_Debit_Ref_Lim_Amt}"/></td>
-                            <td><input type="text" id="root_Cum_Debit_Ref_Lim_Amt" value="{/Application/Merchant/Root/Cum_Debit_Ref_Lim_Amt}"/></td>
-                            <td><input type="text" id="root_Temp_Single_Debit_REF_Lim_Amt" value="{/Application/Merchant/Root/Temp_Single_Debit_REF_Lim_Amt}"/></td>
-                            <td><input type="text" id="root_Temp_Single_Debit_REF_Lim_ExpiryDate" value="{/Application/Merchant/Root/Temp_Single_Debit_REF_Lim_ExpiryDate}"/></td>
-                        </tr>
-                        <tr>
-                            <td><input type="text" id="root_Temp_Cum_Debit_REF_Lim_Amt" value="{/Application/Merchant/Root/Temp_Cum_Debit_REF_Lim_Amt}"/></td>
-                            <td><input type="text" id="root_Temp_Cum_Debit_REF_Lim_ExpiryDate" value="{/Application/Merchant/Root/Temp_Cum_Debit_REF_Lim_ExpiryDate}"/></td>
-                        </tr>
-                    </table>
-                    <button onclick="saveData('root')">Save</button>
-                </div>
-
-                <!-- Outlet Tab (Editable) -->
-                <div id="outletTab" style="display:none;">
-                    <table class="tabcontent">
-                        <tr>
-                            <th>Header 1</th>
-                            <th>Header 2</th>
-                            <th>Header 3</th>
-                            <th>Header 4</th>
-                        </tr>
-                        <xsl:for-each select="/Application/MultipleOutlet/OutletDetails/Outlet">
-                            <tr>
-                                <td><input type="text" value="{Single_Debit_Ref_Lim_Amt}"/></td>
-                                <td><input type="text" value="{Cum_Debit_Ref_Lim_Amt}"/></td>
-                                <td><input type="text" value="{Temp_Single_Debit_REF_Lim_Amt}"/></td>
-                                <td><input type="text" value="{Temp_Single_Debit_REF_Lim_ExpiryDate}"/></td>
-                            </tr>
-                            <tr>
-                                <td><input type="text" value="{Temp_Cum_Debit_REF_Lim_Amt}"/></td>
-                                <td><input type="text" value="{Temp_Cum_Debit_REF_Lim_ExpiryDate}"/></td>
-                            </tr>
-                        </xsl:for-each>
-                    </table>
-                    <button onclick="saveData('outlet')">Save</button>
-                </div>
-
-
-												<!-- added by JAY-->
+	<!-- Added by JAY-->
 	
 
 	<tr>
@@ -21347,6 +21594,87 @@ or $Prin_3_Mob_Phone_R4=$Prin_2_Mob_Phone or $Prin_3_Mob_Phone_R4=$Prin_3_Phone 
 			<textarea rows="2" cols="150" id="comment">&#x20;</textarea>
 		</td>
 	</tr>
+<!--Added by JAY-->
+
+<script>
+window.onload = function() {
+    var selectMenu = document.getElementById('DbtRfd');
+    selectMenu.onchange = function() {
+        document.getElementById('Maker').style.display = 'none';
+        document.getElementById('Root').style.display = 'none';
+        document.getElementById('Outlet').style.display = 'none';
+        document.getElementById(this.value).style.display = 'block';
+    }
+    selectMenu.onchange(); // To ensure the correct tab is shown at start
+}
+</script>
+
+      
+    <tr>
+        <td class="label_tag" style="text-align:left;font-weight:bold;">Debit Refund 1</td>
+        <td>
+        <select name="DbtRfd" id="DbtRfd" width="100" style="width: 175px">
+            <option value="Maker">Maker</option>
+            <option value="Root">Root</option>
+            <option value="Outlet">Outlet</option>
+        </select>
+        </td>
+    </tr>
+    
+    <xsl:choose>
+        <xsl:when test="DbtRfd = 'Maker'">
+            <div id="Maker" style="display: block;">
+                <table>
+                <tr class="sortHitDiv">
+                    <td colspan="6" align="center" style="text-align:left;font-weight:bold;">
+                    <span class="expand1">-</span>Maker Tab
+                    </td>
+                    
+                </tr>
+                <tr><th>Header 1</th><th>Header 2</th><th>Header 3</th><th>Header 4</th></tr>
+                <tr><td>A</td><td>99999</td><td>B</td><td>99999</td></tr>
+                <tr><td>C</td><td>99999</td><td>D</td><td>Date</td></tr>
+                <tr><td>E</td><td>99999</td><td>F</td><td>Date</td></tr>
+                </table>
+            </div>
+        </xsl:when>
+        <xsl:when test="DbtRfd = 'Root'">
+            <div id="Root" style="display: none;">
+                <table>
+                <tr class="sortHitDiv">
+                    <td colspan="6" align="center" style="text-align:left;font-weight:bold;">
+                    <span class="expand1">-</span>Root Tab
+                    </td>
+                    
+                </tr>
+                <tr><th>Header 1</th><th>Header 2</th><th>Header 3</th><th>Header 4</th></tr>
+                <tr><td>A</td><td>99999</td><td>B</td><td>99999</td></tr>
+                <tr><td>C</td><td>99999</td><td>D</td><td>Date</td></tr>
+                <tr><td>E</td><td>99999</td><td>F</td><td>Date</td></tr>
+                </table>
+            </div>
+        </xsl:when>
+        <xsl:when test="DbtRfd = 'Outlet'">
+            <div id="Outlet" style="display: none;">
+                <table>
+                <tr class="sortHitDiv">
+                    <td colspan="6" align="center" style="text-align:left;font-weight:bold;">
+                    <span class="expand1">-</span>Outlet Tab
+                    </td>
+                    
+                </tr>
+                <tr><th>Header 1</th><th>Header 2</th><th>Header 3</th><th>Header 4</th></tr>
+                <tr><td>A</td><td>99999</td><td>B</td><td>99999</td></tr>
+                <tr><td>C</td><td>99999</td><td>D</td><td>Date</td></tr>
+                <tr><td>E</td><td>99999</td><td>F</td><td>Date</td></tr>
+                </table>
+            </div>
+        </xsl:when>
+    </xsl:choose>
+
+
+<!--Added by JAY-->
+
 	<tr>
 		<td colspan="8" style="text-align:center;">&#160;</td>
 	</tr>
@@ -22466,6 +22794,7 @@ or $Prin_3_Mob_Phone_R4=$Prin_2_Mob_Phone or $Prin_3_Mob_Phone_R4=$Prin_3_Phone 
 <xsl:value-of select="/enrichedAlert/content/Alert/WEBSITE_REVIEW/SUMMARY"/>
 </textarea>
 				<input type="hidden" name="newrec" id="newrec" value="newrec"/>
+				<input type="hidden" name="AMOCheckHidden" id="AMOCheckHidden" value=""/>
 				
 			</td>
 		</tr>
@@ -26698,6 +27027,7 @@ jQuery(document).ready(function(){
 	$(".tab li:first").addClass("active");
 	$("#GNFTab").hide();
 	$("#RNFTab").hide();	
+	$("#ERNFTab").hide();
 	$("#MATCHTab").hide();
 	$("#VMASTab").hide();
 	$("#MATCHBTTab").hide();
@@ -27153,23 +27483,7 @@ function toggleDiv(Obj){
 				httpObj.send(""); 
 				
 	   }, 1000);	 
-	/*EAMLoggingChanges Start*/
-	user = RCMAPI.user.identifier;
-	action = '"US Credit Bureau Resubmited"'
-	var startTime = performance.now()
-		activity = '"US Credit Bureau Resubmit"'
-		object_type = "screen"
-		signature = '"user audit"'
-		message = '"US Credit Bureau Resubmit button clicked by user"'
-			$('.validationCheck').find('input[type=text], select').each(function(){
-				$(this).val("")
-			})
-			var endTime = performance.now()
-		var timeTaken = ((endTime - startTime) / 1000)
-		timeTaken = Math.round(timeTaken * 1000000) / 1000000
-		duration=timeTaken
-		sendLoggingInfo()
-	/*EAMLoggingChanges End*/
+
 	}			
 	function showImage(){
 		document.getElementById("imgProcess").style.display = "block";
@@ -27488,24 +27802,7 @@ function saveWebRev(){
 		}	
 	 }; 
 	 httpObj.send("");
-	/*EAMLoggingChanges Start*/
-	//console.log("EAM logging Function is called")
-	user = RCMAPI.user.identifier;
-	action = '"Web Review Submitted"'
-	var startTime = performance.now()
-		activity = '"Web Review Submission"'
-		object_type = "screen"
-		signature = '"user audit"'
-		message = '"Web Review Submit button clicked by user"'
-			$('.validationCheck').find('input[type=text], select').each(function(){
-				$(this).val("")
-			})
-			var endTime = performance.now()
-		var timeTaken = ((endTime - startTime) / 1000)
-		timeTaken = Math.round(timeTaken * 1000000) / 1000000
-		duration=timeTaken
-		sendLoggingInfo()
-	/*EAMLoggingChanges End*/
+
  }
 function checkUserChecklist(){
 	AlertOwner = '<xsl:value-of select="/enrichedAlert/@ownerIdentifier"/>';
@@ -27686,6 +27983,8 @@ function validateWebCheck(){
 }
 /* Document OnReady For auto population website review checklist   */
 $(document).ready(function(){	
+
+       AMODecisionWarning();
 
 	/* Conditional Approval Load Decision screen --> PUW alert --> A1 call CA Indicator start*/
 	
@@ -28053,7 +28352,32 @@ function fetchUserRoles(){
 			var demographicTaxIdValue = document.getElementById("demographicTaxId").parentElement.innerText;
 			if(demographicTaxIdValue){
 				$("#demographicTaxId").html('<img src="app_gui_items/images/VoltageDecrypt.png" alt="" style="width:auto; height:auto;" onclick="aisCall(this);auditPCIActions(\'Decrypt\')" value="d"/>');
-			}	
+		
+	}	
+ 	
+	    var creditCardNumberValue = '<xsl:value-of select="/enrichedAlert/content/Alert/Application/CardInfo/CreditCardNumber"/>';	
+		     console.log("Encrypted Credit Card Number# "+creditCardNumberValue)
+		if(creditCardNumberValue!='' &amp;&amp; typeof creditCardNumberValue!='undefined'){
+				$("#creditCardNumber").html('<img src="app_gui_items/images/VoltageDecrypt.png" alt="" style="width:auto; height:auto;" onclick="aisCall(this);auditPCIActions(\'Decrypt\')" value="d"/>');
+			} 
+
+			
+			<!-- var creditCardNumberValue = '<xsl:value-of select="/enrichedAlert/content/Alert/Application/CardInfo/CreditCardNumber"/>';	
+				console.log("Encrypted Credit Card Number# "+creditCardNumberValue);
+
+			if(creditCardNumberValue != '' &amp;&amp; typeof creditCardNumberValue != 'undefined'){
+				// Check if the string ends with a backslash
+				if (creditCardNumberValue.slice(-2) == '\\\\') {
+					// If it does, remove the extra backslash before decryption
+					creditCardNumberValue = creditCardNumberValue.slice(0, -2) + '\\';
+				}
+				// Display the value with a single backslash
+				console.log("Display Value: " + creditCardNumberValue);
+				$("#creditCardNumber").html('<img src="app_gui_items/images/VoltageDecrypt.png" alt="" style="width:auto; height:auto;" onclick="aisCall(this);auditPCIActions(\'Decrypt\')" value="d"/>');
+			} -->
+
+			
+
 
 		var MatchResult='<xsl:value-of select= "/enrichedAlert/content/Alert/MATCH/REALTIME/MATCH_RT_Response/Result"/>';
 		if(MatchResult=='Match'){
@@ -28084,8 +28408,10 @@ function fetchUserRoles(){
 		for(i=1;i&lt;=totalPrincReq;i++){
 		var dynamicNationalId='PrincipalNationalID'+i;
 		var dynamicDriverLicense='PrincipalDriverLicense'+i;
-		var PrincipalDynamicTaxIDValue=document.getElementsByClassName(dynamicNationalId)[i-1].parentElement.innerText;
-		var PrincipalDynamicDriverLicenseNumber=document.getElementsByClassName(dynamicDriverLicense)[i-1].parentElement.innerText;
+		//var PrincipalDynamicTaxIDValue=document.getElementsByClassName(dynamicNationalId)[i-1].parentElement.innerText;
+		//var PrincipalDynamicDriverLicenseNumber=document.getElementsByClassName(dynamicDriverLicense)[i-1].parentElement.innerText;
+		var PrincipalDynamicTaxIDValue=document.getElementsByClassName(dynamicNationalId)[0].parentElement.innerText;
+        var PrincipalDynamicDriverLicenseNumber=document.getElementsByClassName(dynamicDriverLicense)[0].parentElement.innerText;
 		//console.log("value of driver License Number is"+typeof PrincipalDynamicTaxIDValue);
 		if(PrincipalDynamicTaxIDValue!='' &amp;&amp; typeof PrincipalDynamicTaxIDValue!="undefined"){
 		$("."+dynamicNationalId).html('<img src="app_gui_items/images/VoltageDecrypt.png" alt="" style="width:auto; height:auto;" onclick="aisCallClass(this);auditPCIActions(\'Decrypt\')" value="d"/>');
@@ -28290,23 +28616,7 @@ function aisCall(Obj){
 					}	
 					//localStorage.setItem('type','d');
 					
-					/*EAMLoggingChanges Start*/
-					user = RCMAPI.user.identifier;
-					action = '"Voltage Encrypted"'
-					var startTime = performance.now()
-						activity = '"Voltage Encryption"'
-						object_type = "screen"
-						signature = '"user audit"'
-						message = '"Voltage Encryption button clicked by user"'
-							$('.validationCheck').find('input[type=text], select').each(function(){
-								$(this).val("")
-							})
-							var endTime = performance.now()
-						var timeTaken = ((endTime - startTime) / 1000)
-						timeTaken = Math.round(timeTaken * 1000000) / 1000000
-						duration=timeTaken
-						sendLoggingInfo()
-					/*EAMLoggingChanges End*/
+			
 				}	
 				else{
 					$("#"+id).html('<img src="app_gui_items/images/VoltageEncrypt.png" alt="" style="width:auto; height:auto;" onclick="aisCall(this);" value="e"/>');
@@ -28332,23 +28642,7 @@ function aisCall(Obj){
 					$("#"+id).parent().html(eval.replace(evalue,result));
 					//localStorage.setItem('type','e');*/
 					
-					/*EAMLoggingChanges Start*/
-					user = RCMAPI.user.identifier;
-					action = '"Voltage Decrypted"'
-					var startTime = performance.now()
-						activity = '"Voltage Decryption"'
-						object_type = "screen"
-						signature = '"user audit"'
-						message = '"Voltage Decryption button clicked by user"'
-							$('.validationCheck').find('input[type=text], select').each(function(){
-								$(this).val("")
-							})
-							var endTime = performance.now()
-						var timeTaken = ((endTime - startTime) / 1000)
-						timeTaken = Math.round(timeTaken * 1000000) / 1000000
-						duration=timeTaken
-					sendLoggingInfo()
-					/*EAMLoggingChanges End*/
+				
 				}
 			}
 			else{
@@ -28358,23 +28652,7 @@ function aisCall(Obj){
 				console.log("errorString: "+errorString);
 				alert("Voltage functionality is not working");
 				
-				/*EAMLoggingChanges Start*/
-				user = RCMAPI.user.identifier;
-				action = '"Encryption/Decryption"'
-				var startTime = performance.now()
-					activity = '"Voltage Encryption/Decryption"'
-					object_type = "screen"
-					signature = '"user audit"'
-					message = '"Voltage Encryption/Decryption (Errored) button clicked by user"'
-						$('.validationCheck').find('input[type=text], select').each(function(){
-							$(this).val("")
-						})
-						var endTime = performance.now()
-					var timeTaken = ((endTime - startTime) / 1000)
-					timeTaken = Math.round(timeTaken * 1000000) / 1000000
-					duration=timeTaken
-				sendLoggingInfo()
-				/*EAMLoggingChanges End*/
+				
 			}
 		}
 }
@@ -28450,7 +28728,12 @@ function negativecolorchange(){
 	var neustarResult = '<xsl:value-of select="/enrichedAlert/content/Alert/NEUSTAR/NEUSTAR_Response/Result"/>';
 	var telecheckResult = '<xsl:value-of select="/enrichedAlert/content/Alert/TELECHECK/TELECHECK_Response/Result"/>';
 	var rnfResult = '<xsl:value-of select="/enrichedAlert/content/Alert/RNF/RNF_Response/Result"/>';
+	   	var ERNFResult = '<xsl:value-of select="/enrichedAlert/content/Alert/ERNF/RNF_Response/RNF_CNT"/>';
 	
+	
+	if(ERNFResult>0){ 
+	  document.getElementById('ERNF').style.backgroundColor="#e64c4c";
+	}
 	if(gnfTotalMatches){
 		if(parseInt(gnfTotalMatches) > 0){
 			document.getElementById('gnftablinkID').style.backgroundColor="#e64c4c";
