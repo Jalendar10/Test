@@ -1,0 +1,154 @@
+package com.fiserv.diligenceServices;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
+import java.util.Base64;
+import java.util.UUID;
+
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+public class App {
+    public static void main(String[] args) {
+        System.out.println("Hello World!");
+        String API_KEY = "YGXZ0EJ82DYAHJeyZ5MAyxqIHplEADSroxnOSRu9FyG7jg4w";
+        String API_SECRET = "gwiwIZiSjQTHrYs8wMg2OHm1p6iZvwCBuH2x1xBFXcHAOdcFNYKVPcyn67h4O33P";
+        String BASE_URL = "https://connect-wan.fiservapis.com/ai-gateway/v1/chat/completions";
+
+        String apiKey = API_KEY;
+        String secret = API_SECRET;
+        String baseUrl = BASE_URL;
+
+        if (apiKey == null || secret == null || baseUrl == null) {
+            System.out.println("API Key, Secret, or Base URL is not set.");
+            System.exit(0);
+        }
+
+        String requestBody = getRequestBody();
+        long timestamp = System.currentTimeMillis();
+        String requestId = UUID.randomUUID().toString();
+
+        String hmacSignature = generateHmacSignature(requestBody, apiKey, secret, timestamp, requestId);
+        sendRequest(requestBody, hmacSignature, baseUrl, apiKey, timestamp, requestId);
+    }
+
+    private static String getRequestBody() {
+        JSONArray messages = new JSONArray();
+
+        // Construct the system prompt
+        JSONObject message1 = new JSONObject();
+        message1.put("content", "you generate a one word response based on user prompting");
+        message1.put("role", "system");
+        messages.put(message1);
+
+        // Construct the user input
+        JSONObject message2 = new JSONObject();
+        message2.put("content", "cartoon dog");
+        message2.put("role", "user");
+        messages.put(message2);
+
+        JSONObject responseFormat = new JSONObject();
+        responseFormat.put("type", "text");
+
+        JSONObject body = new JSONObject();
+        body.put ("model", "azure-openai-4o-east"); // or whatever your model is
+        body.put("messages", messages);
+        body.put("frequency_penalty", 0);
+        body.put("max_tokens", "40");
+        body.put("n", 1);
+        body.put("presence_penalty", 0);
+        body.put("response_format", responseFormat);
+        body.put("stream", false);
+        body.put("temperature", 1);
+        body.put("top_p", 1);
+
+        String requestBody = body.toString();
+        System.out.println("request body: " + requestBody);
+
+        return requestBody;
+    }
+
+    private static String generateHmacSignature(String requestBodyString, String apiKey, String secret, long timestamp, String requestId) {
+        String hmacSourceData = apiKey + requestId + timestamp + requestBodyString;
+
+        String algorithm = "HmacSHA256";
+        SecretKeySpec secretKeySpec = new SecretKeySpec(secret.getBytes(), algorithm);
+        Mac mac = null;
+
+        try {
+            mac = Mac.getInstance(algorithm);
+        } catch (NoSuchAlgorithmException nsae) {
+            System.out.println(nsae);
+            System.exit(0);
+        }
+
+        try {
+            mac.init(secretKeySpec);
+        } catch (InvalidKeyException ike) {
+            System.out.println(ike);
+            System.exit(0);
+        }
+
+        String hmacSignature = Base64.getEncoder().encodeToString(mac.doFinal(hmacSourceData.getBytes()));
+        return hmacSignature;
+    }
+
+    private static void sendRequest(String requestBodyString, String hmacSignature, String baseUrl, String apiKey, long timestamp, String requestId) {
+        try {
+            URL url = new URL(baseUrl);
+
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("POST");
+
+            connection.setDoInput(true);
+            connection.setDoOutput(true);
+
+            connection.setRequestProperty("Content-Type", "application/json");
+            connection.setRequestProperty("Accept", "application/json");
+            connection.setRequestProperty("api-key", apiKey);
+            connection.setRequestProperty("Client-Request-Id", requestId);
+            connection.setRequestProperty("Timestamp", Long.toString(timestamp));
+            connection.setRequestProperty("Authorization", hmacSignature);
+
+            // Write the payload to the request body
+            try (OutputStream os = connection.getOutputStream()) {
+                byte[] input = requestBodyString.getBytes("utf-8");
+                os.write(input, 0, requestBodyString.length());
+            }
+
+            int responseCode = connection.getResponseCode();
+            System.out.println("Response Code: " + responseCode);
+
+            // Read the response body
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
+                String line;
+                StringBuilder sb = new StringBuilder();
+                while ((line = br.readLine()) != null) {
+                    sb.append(line).append('\n');
+                }
+                System.out.println("Response Body: " + sb.toString());
+               
+                // Parse the JSON response and extract message.content
+                JSONObject jsonResponse = new JSONObject(sb.toString());
+                JSONArray choices = jsonResponse.getJSONArray("choices");
+                JSONObject message = choices.getJSONObject(0).getJSONObject("message");
+                String content = message.getString("content");
+                System.out.println("Response Content: " + content);
+            }
+
+            connection.disconnect();
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+}
