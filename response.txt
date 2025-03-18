@@ -1,0 +1,474 @@
+Folder Structure
+arduino
+Copy
+Edit
+diligenceAIChatBot
+  ├─ pom.xml
+  └─ src
+     └─ main
+        ├─ java
+        │  └─ com
+        │     └─ fiserv
+        │        └─ diligenceAIChatBot
+        │           ├─ DiligenceAIChatBotApplication.java
+        │           ├─ config
+        │           │  └─ AppConfig.java
+        │           ├─ controller
+        │           │  └─ ChatController.java
+        │           ├─ model
+        │           │  └─ ChatRequest.java
+        │           └─ service
+        │              ├─ ChatService.java
+        │              └─ HmacUtil.java
+        └─ resources
+           ├─ application.properties
+           └─ config.properties
+Below are the contents of each file.
+
+1. pom.xml
+xml
+Copy
+Edit
+<project xmlns="http://maven.apache.org/POM/4.0.0" 
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
+                             http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.fiserv</groupId>
+    <artifactId>diligenceAIChatBot</artifactId>
+    <version>1.0.0</version>
+    <packaging>jar</packaging>
+
+    <name>Diligence AI Chat Bot</name>
+
+    <!-- Java 1.8 -->
+    <properties>
+        <java.version>1.8</java.version>
+        <maven.compiler.source>1.8</maven.compiler.source>
+        <maven.compiler.target>1.8</maven.compiler.target>
+    </properties>
+    
+    <dependencies>
+        <!-- Spring Boot Starter Web -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+            <version>2.7.12</version> 
+            <!-- 
+                 Adjust to a Spring Boot 2.x version that supports Java 8.
+            -->
+        </dependency>
+
+        <!-- JSON processing: org.json -->
+        <dependency>
+            <groupId>org.json</groupId>
+            <artifactId>json</artifactId>
+            <version>20210307</version>
+        </dependency>
+
+        <!-- Additional dependencies as needed -->
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Spring Boot Maven Plugin -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <version>2.7.12</version>
+            </plugin>
+        </plugins>
+    </build>
+</project>
+2. application.properties
+properties
+Copy
+Edit
+# Minimal Spring Boot config
+server.port=8080
+
+# We'll rely on config.properties for API Key, Secret, Base URL, etc.
+3. config.properties
+Replace the placeholders with your actual values.
+
+properties
+Copy
+Edit
+apiKey=YOUR_API_KEY_VALUE
+apiSecret=YOUR_API_SECRET_VALUE
+baseUrl=https://connect-wan.fiservapis.com/ai-gateway/v1/chat/completions
+4. DiligenceAIChatBotApplication.java
+java
+Copy
+Edit
+package com.fiserv.diligenceAIChatBot;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class DiligenceAIChatBotApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(DiligenceAIChatBotApplication.class, args);
+    }
+}
+5. AppConfig.java (in com.fiserv.diligenceAIChatBot.config)
+java
+Copy
+Edit
+package com.fiserv.diligenceAIChatBot.config;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Properties;
+
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class AppConfig {
+
+    private String apiKey;
+    private String apiSecret;
+    private String baseUrl;
+
+    public AppConfig() {
+        try (InputStream input = getClass().getClassLoader().getResourceAsStream("config.properties")) {
+            Properties prop = new Properties();
+            prop.load(input);
+
+            this.apiKey = prop.getProperty("apiKey");
+            this.apiSecret = prop.getProperty("apiSecret");
+            this.baseUrl = prop.getProperty("baseUrl");
+        } catch (IOException ex) {
+            ex.printStackTrace();
+            // In production, handle this more gracefully
+        }
+    }
+
+    public String getApiKey() {
+        return apiKey;
+    }
+
+    public String getApiSecret() {
+        return apiSecret;
+    }
+
+    public String getBaseUrl() {
+        return baseUrl;
+    }
+}
+6. HmacUtil.java (in com.fiserv.diligenceAIChatBot.service)
+java
+Copy
+Edit
+package com.fiserv.diligenceAIChatBot.service;
+
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
+import java.util.Base64;
+
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+
+public class HmacUtil {
+
+    public static String generateHmacSignature(String requestBody,
+                                               String apiKey,
+                                               String secret,
+                                               long timestamp,
+                                               String requestId) {
+        String dataToSign = apiKey + requestId + timestamp + requestBody;
+        String algorithm = "HmacSHA256";
+
+        try {
+            Mac mac = Mac.getInstance(algorithm);
+            SecretKeySpec secretKeySpec = new SecretKeySpec(secret.getBytes(), algorithm);
+            mac.init(secretKeySpec);
+            byte[] rawHmac = mac.doFinal(dataToSign.getBytes());
+            return Base64.getEncoder().encodeToString(rawHmac);
+
+        } catch (NoSuchAlgorithmException | InvalidKeyException e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+}
+7. ChatService.java (in com.fiserv.diligenceAIChatBot.service)
+java
+Copy
+Edit
+package com.fiserv.diligenceAIChatBot.service;
+
+import com.fiserv.diligenceAIChatBot.config.AppConfig;
+import org.json.JSONArray;
+import org.json.JSONObject;
+import org.springframework.stereotype.Service;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.UUID;
+
+@Service
+public class ChatService {
+
+    private final AppConfig appConfig;
+
+    public ChatService(AppConfig appConfig) {
+        this.appConfig = appConfig;
+    }
+
+    /**
+     * Calls the remote AI service with the given systemContent and userContent.
+     * n parameter indicates how many completions we want.
+     */
+    public String callRemoteAi(String systemContent, String userContent, int n) {
+        String requestBody = buildRequestBody(systemContent, userContent, n);
+        String apiKey = appConfig.getApiKey();
+        String secret = appConfig.getApiSecret();
+        String baseUrl = appConfig.getBaseUrl();
+
+        long timestamp = System.currentTimeMillis();
+        String requestId = UUID.randomUUID().toString();
+
+        // Generate signature
+        String hmacSignature = HmacUtil.generateHmacSignature(
+                requestBody, apiKey, secret, timestamp, requestId
+        );
+
+        try {
+            URL url = new URL(baseUrl);
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("POST");
+
+            connection.setDoOutput(true);
+            connection.setDoInput(true);
+
+            connection.setRequestProperty("Content-Type", "application/json");
+            connection.setRequestProperty("Accept", "application/json");
+            connection.setRequestProperty("api-key", apiKey);
+            connection.setRequestProperty("Client-Request-Id", requestId);
+            connection.setRequestProperty("Timestamp", String.valueOf(timestamp));
+            connection.setRequestProperty("Authorization", hmacSignature);
+
+            // Write request body
+            try (OutputStream os = connection.getOutputStream()) {
+                os.write(requestBody.getBytes("utf-8"));
+            }
+
+            int responseCode = connection.getResponseCode();
+
+            BufferedReader br = null;
+            if (responseCode >= 200 && responseCode < 300) {
+                br = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+            } else {
+                // If error response, attempt to read from error stream
+                br = new BufferedReader(new InputStreamReader(connection.getErrorStream()));
+            }
+
+            StringBuilder responseBuilder = new StringBuilder();
+            String line;
+            while ((line = br.readLine()) != null) {
+                responseBuilder.append(line).append('\n');
+            }
+            br.close();
+
+            connection.disconnect();
+
+            String responseBody = responseBuilder.toString();
+
+            // Parse the JSON for "choices" array and "message.content"
+            JSONObject json = new JSONObject(responseBody);
+            if (!json.has("choices")) {
+                // Return the raw response if "choices" is missing
+                return responseBody;
+            }
+
+            JSONArray choices = json.getJSONArray("choices");
+
+            StringBuilder result = new StringBuilder();
+            for (int i = 0; i < choices.length(); i++) {
+                JSONObject messageObj = choices.getJSONObject(i).getJSONObject("message");
+                String content = messageObj.getString("content");
+                result.append("Response #").append(i + 1).append(": ")
+                      .append(content).append("\n");
+            }
+
+            return result.toString();
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return "Error: " + e.getMessage();
+        }
+    }
+
+    /**
+     * Build the JSON request body for the AI call.
+     */
+    private String buildRequestBody(String systemContent, String userContent, int n) {
+        JSONArray messages = new JSONArray();
+
+        // system role
+        JSONObject systemMessage = new JSONObject();
+        systemMessage.put("content", systemContent);
+        systemMessage.put("role", "system");
+        messages.put(systemMessage);
+
+        // user role
+        JSONObject userMessage = new JSONObject();
+        userMessage.put("content", userContent);
+        userMessage.put("role", "user");
+        messages.put(userMessage);
+
+        // Response format
+        JSONObject responseFormat = new JSONObject();
+        responseFormat.put("type", "text");
+
+        JSONObject body = new JSONObject();
+        body.put("model", "azure-openai-4o-east"); // or your actual model
+        body.put("messages", messages);
+        body.put("frequency_penalty", 0);
+        body.put("max_tokens", "40");
+        body.put("n", n);
+        body.put("presence_penalty", 0);
+        body.put("response_format", responseFormat);
+        body.put("stream", false);
+        body.put("temperature", 1);
+        body.put("top_p", 1);
+
+        return body.toString();
+    }
+}
+8. ChatRequest.java (in com.fiserv.diligenceAIChatBot.model)
+java
+Copy
+Edit
+package com.fiserv.diligenceAIChatBot.model;
+
+public class ChatRequest {
+    private String systemContent;
+    private String userContent;
+
+    public String getSystemContent() {
+        return systemContent;
+    }
+
+    public void setSystemContent(String systemContent) {
+        this.systemContent = systemContent;
+    }
+
+    public String getUserContent() {
+        return userContent;
+    }
+
+    public void setUserContent(String userContent) {
+        this.userContent = userContent;
+    }
+}
+9. ChatController.java (in com.fiserv.diligenceAIChatBot.controller)
+java
+Copy
+Edit
+package com.fiserv.diligenceAIChatBot.controller;
+
+import com.fiserv.diligenceAIChatBot.model.ChatRequest;
+import com.fiserv.diligenceAIChatBot.service.ChatService;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+public class ChatController {
+
+    private final ChatService chatService;
+
+    public ChatController(ChatService chatService) {
+        this.chatService = chatService;
+    }
+
+    /**
+     * Simple test endpoint to verify the app is running.
+     * GET http://localhost:8080/test
+     */
+    @GetMapping("/test")
+    public String testEndpoint() {
+        return "Hello from DiligenceAIChatBot test endpoint!";
+    }
+
+    /**
+     * POST http://localhost:8080/chat_response
+     * 
+     * Expects JSON body:
+     * {
+     *   "systemContent": "...",
+     *   "userContent": "..."
+     * }
+     */
+    @PostMapping("/chat_response")
+    public String getChatResponse(@RequestBody ChatRequest request) {
+        return chatService.callRemoteAi(request.getSystemContent(), request.getUserContent(), 1);
+    }
+
+    /**
+     * POST http://localhost:8080/recommendation
+     *
+     * Expects JSON body:
+     * {
+     *   "systemContent": "...",
+     *   "userContent": "..."
+     * }
+     */
+    @PostMapping("/recommendation")
+    public String getRecommendations(@RequestBody ChatRequest request) {
+        // Here we ask for 3 completions
+        return chatService.callRemoteAi(request.getSystemContent(), request.getUserContent(), 3);
+    }
+}
+How to Run in STS (Spring Tool Suite)
+Import the Project
+
+In STS, File → Import → Maven → Existing Maven Projects.
+Browse to the folder containing pom.xml.
+Click Finish to import.
+Ensure Java 1.8
+
+Right-click the project → Properties → Java Compiler → set compliance to 1.8 if needed.
+Configure config.properties
+
+Edit src/main/resources/config.properties to supply:
+properties
+Copy
+Edit
+apiKey=YOUR_ACTUAL_KEY
+apiSecret=YOUR_ACTUAL_SECRET
+baseUrl=https://connect-wan.fiservapis.com/ai-gateway/v1/chat/completions
+Build & Run
+
+Right-click the project → Run As → Maven install (if needed to resolve dependencies).
+Then Run As → Spring Boot App (or Run As → Java Application on the main class).
+Test
+
+Open a browser (or Postman, or curl) and hit:
+http://localhost:8080/test
+Should return "Hello from DiligenceAIChatBot test endpoint!".
+For POST /chat_response, send JSON:
+bash
+Copy
+Edit
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"systemContent":"You are a helpful assistant", "userContent":"Hello, how are you?"}' \
+  http://localhost:8080/chat_response
+For POST /recommendation, send JSON:
+bash
+Copy
+Edit
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"systemContent":"You are a helpful assistant", "userContent":"Recommend me a movie"}' \
+  http://localhost:8080/recommendation
+That’s it! You now have a Spring Boot application (Java 1.8, Maven) named diligenceAIChatBot that:
+
+Loads API credentials from config.properties
+Provides /test, /chat_response, and /recommendation endpoints
+Calls the remote AI service and returns responses.
