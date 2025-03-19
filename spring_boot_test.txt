@@ -1,5 +1,5 @@
 Project Structure
-arduino
+css
 Copy
 Edit
 my-spring-boot-rules/
@@ -11,7 +11,7 @@ my-spring-boot-rules/
 │       │       └── example
 │       │           └── rulesapp
 │       │               ├── RulesAppApplication.java
-│       │               ├── DataInitializer.java     <-- new
+│       │               ├── DataInitializer.java
 │       │               ├── controller
 │       │               │   ├── HomeController.java
 │       │               │   ├── RulesConfigController.java
@@ -33,7 +33,7 @@ my-spring-boot-rules/
 │           ├── application.properties
 │           └── templates
 │               ├── home.html
-│               ├── createApplication.html          <-- new
+│               ├── createApplication.html
 │               ├── rulesConfig.html
 │               ├── editRule.html
 │               ├── ranrules.html
@@ -42,6 +42,7 @@ my-spring-boot-rules/
 └── ...
 Below is the complete code for each file.
 
+<br/>
 1) pom.xml
 xml
 Copy
@@ -59,7 +60,6 @@ Edit
 
     <properties>
         <java.version>1.8</java.version>
-        <!-- Adjust Spring Boot version as needed -->
         <spring.boot.version>2.6.14</spring.boot.version>
     </properties>
 
@@ -111,8 +111,8 @@ Edit
             </plugin>
         </plugins>
     </build>
-
 </project>
+<br/>
 2) application.properties
 properties
 Copy
@@ -123,8 +123,9 @@ spring.jpa.hibernate.ddl-auto=update
 
 spring.h2.console.enabled=true
 spring.h2.console.path=/h2-console
-Enables an in-memory H2 DB at jdbc:h2:mem:rulesdb and an H2 console at /h2-console.
+Enables an in-memory H2 DB with a console at /h2-console.
 
+<br/>
 3) RulesAppApplication.java
 java
 Copy
@@ -142,8 +143,9 @@ public class RulesAppApplication {
 }
 Main entry point.
 
-4) DataInitializer.java (NEW)
-Automatically inserts 30 predefined fields on startup if no fields exist yet.
+<br/>
+4) DataInitializer.java
+On startup, it automatically inserts 30 fields if none exist.
 
 java
 Copy
@@ -165,13 +167,12 @@ public class DataInitializer implements CommandLineRunner {
     }
 
     @Override
-    public void run(String... args) throws Exception {
-        // If fields are already in the DB, don't re-insert them:
+    public void run(String... args) {
         if (!dataService.getAllFields().isEmpty()) {
-            return;
+            return; // Already have fields, skip
         }
 
-        // Insert 30 predefined fields with some default values:
+        // Insert 30 predefined fields with default values
         dataService.createField(new FieldDefinition("name",           "TEXT",   "John Doe"));
         dataService.createField(new FieldDefinition("age",            "NUMBER", "25"));
         dataService.createField(new FieldDefinition("sales",          "NUMBER", "1000"));
@@ -202,14 +203,14 @@ public class DataInitializer implements CommandLineRunner {
         dataService.createField(new FieldDefinition("productCategory","TEXT",   "Consumer Goods"));
         dataService.createField(new FieldDefinition("salesTarget",    "NUMBER", "2000"));
         dataService.createField(new FieldDefinition("comments",       "TEXT",   "N/A"));
-
-        // You now have 30 predefined fields in the DB.
     }
 }
+<br/>
 5) Controller Classes
 5.1) HomeController.java
-We separate the “list all applications” (on /home) from the “create application form” (on /createApplication):
-
+/home → lists existing applications.
+/createApplication → shows a form with all fields.
+/submitApplication → saves the application, runs the rules, sets a final decision.
 java
 Copy
 Edit
@@ -241,74 +242,73 @@ public class HomeController {
     }
 
     /**
-     * Shows a list of all existing applications, with a link to create a new one.
+     * Shows all existing applications, plus a link to create a new one.
      */
     @GetMapping({"/", "/home"})
     public String home(Model model) {
-        // List all applications
         model.addAttribute("applications", dataService.getAllApplications());
-        return "home";  // Just shows the list (and a link to /createApplication)
+        return "home"; // Just a list + link to /createApplication
     }
 
     /**
-     * Shows a form with all fields (prepopulated with default values) for creating a new application.
+     * Displays a form with all fields (using default values).
      */
     @GetMapping("/createApplication")
     public String showCreateApplicationForm(Model model) {
-        // Get the 30 (or more) FieldDefinitions
+        // Get all FieldDefinitions
         List<FieldDefinition> fields = dataService.getAllFields();
         model.addAttribute("fields", fields);
 
-        // Build a map fieldName -> defaultValue
+        // Build map of fieldName -> defaultValue
         Map<String, String> fieldMap = new HashMap<>();
         for (FieldDefinition fd : fields) {
-            fieldMap.put(fd.getFieldName(),
-                    (fd.getDefaultValue() == null) ? "" : fd.getDefaultValue());
+            String defVal = (fd.getDefaultValue() == null) ? "" : fd.getDefaultValue();
+            fieldMap.put(fd.getFieldName(), defVal);
         }
         model.addAttribute("fieldMap", fieldMap);
 
-        return "createApplication";  // new template
+        return "createApplication";
     }
 
     /**
-     * Processes the form submission to create a new application.
-     * Then runs the rules and saves a final decision.
+     * Submits the new application, runs rules, sets final decision, and redirects to /home.
      */
     @PostMapping("/submitApplication")
-    public String submitApplication(
-            @RequestParam("fieldNames") String[] fieldNames,
-            @RequestParam("fieldValues") String[] fieldValues
-    ) {
-        // Build a map of fieldName -> value from form data
+    public String submitApplication(@RequestParam("fieldNames") String[] fieldNames,
+                                    @RequestParam("fieldValues") String[] fieldValues) {
+        // Create a fieldName -> fieldValue map
         Map<String, String> appFieldMap = new HashMap<>();
         for (int i = 0; i < fieldNames.length; i++) {
             appFieldMap.put(fieldNames[i], fieldValues[i]);
         }
 
-        // Create and save the application
-        ApplicationData applicationData = new ApplicationData(appFieldMap);
-        applicationData = dataService.saveApplicationData(applicationData);
+        // Save the new application
+        ApplicationData appData = new ApplicationData(appFieldMap);
+        appData = dataService.saveApplicationData(appData);
 
-        // Evaluate all rules now (optional)
+        // Evaluate rules
         var allRules = dataService.getAllRules();
-        var results = rulesEngineService.evaluateRules(applicationData, allRules);
+        var results = rulesEngineService.evaluateRules(appData, allRules);
 
-        // Generate a final decision like "Ran X rule(s), Y passed"
-        int total = results.size();
-        int passed = (int) results.stream().filter(r -> r.isPassed()).count();
-        String decision = String.format("Ran %d rule(s), %d passed", total, passed);
+        // Summaries
+        int totalRules = results.size();
+        int passedCount = (int) results.stream().filter(r -> r.isPassed()).count();
+        int failedCount = totalRules - passedCount;
 
-        // Save the final decision
-        applicationData.setFinalDecision(decision);
-        dataService.saveApplicationData(applicationData);
+        String decision = String.format("Ran %d rule(s), Passed %d, Failed %d",
+                totalRules, passedCount, failedCount);
 
-        // Redirect to /home to see the updated application list
+        appData.setFinalDecision(decision);
+        dataService.saveApplicationData(appData);
+
         return "redirect:/home";
     }
 }
+<br/>
 5.2) RulesConfigController.java
-Manages field definitions and rule definitions (CRUD). Also includes “edit rule” functionality.
-
+Manages Fields (CRUD).
+Manages Rules (CRUD).
+Rule creation is done via dropdown for one field, plus operator, plus a value (a naive single-condition approach).
 java
 Copy
 Edit
@@ -320,6 +320,8 @@ import com.example.rulesapp.service.DataService;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @Controller
 @RequestMapping("/rulesConfig")
@@ -333,26 +335,36 @@ public class RulesConfigController {
 
     @GetMapping
     public String showConfigPage(Model model) {
-        model.addAttribute("fields", dataService.getAllFields());
+        List<FieldDefinition> fields = dataService.getAllFields();
+        model.addAttribute("fields", fields);
         model.addAttribute("rules", dataService.getAllRules());
         return "rulesConfig";
     }
 
+    /**
+     * Add a new FieldDefinition
+     */
     @PostMapping("/addField")
     public String addField(@RequestParam String fieldName,
                            @RequestParam String fieldType,
                            @RequestParam(required = false) String defaultValue) {
-        if (defaultValue == null) {
-            defaultValue = "";
-        }
+        if (defaultValue == null) defaultValue = "";
         FieldDefinition field = new FieldDefinition(fieldName, fieldType, defaultValue);
         dataService.createField(field);
         return "redirect:/rulesConfig";
     }
 
+    /**
+     * Add a new RuleDefinition: we combine a selected field, operator, and value
+     * into an expression like "age > 18".
+     */
     @PostMapping("/addRule")
-    public String addRule(@RequestParam String expression,
+    public String addRule(@RequestParam String selectedField,
+                          @RequestParam String operator,
+                          @RequestParam String ruleValue,
                           @RequestParam String description) {
+        // Build expression: e.g. "age > 18"
+        String expression = selectedField + " " + operator + " " + ruleValue;
         RuleDefinition rule = new RuleDefinition(expression, description);
         dataService.createRule(rule);
         return "redirect:/rulesConfig";
@@ -373,14 +385,15 @@ public class RulesConfigController {
         if (rule != null) {
             rule.setExpression(expression);
             rule.setDescription(description);
-            dataService.createRule(rule);  // Save again
+            dataService.createRule(rule);
         }
         return "redirect:/rulesConfig";
     }
 }
+<br/>
 5.3) RanRulesController.java
-Shows a list of all applications and, for each, a link to view the rules that were run (or to re-run them on demand).
-
+/ranrules → lists all applications.
+/ranrules/details/{appId} → fetches that specific application, re-runs the rules, and shows results.
 java
 Copy
 Edit
@@ -423,18 +436,28 @@ public class RanRulesController {
             return "ranrules";
         }
 
-        // Evaluate the rules again (or retrieve stored results if you prefer)
+        // Evaluate all rules
         List<RuleDefinition> allRules = dataService.getAllRules();
         List<RuleResult> results = rulesEngineService.evaluateRules(application, allRules);
 
+        // Summaries
+        int totalRules = results.size();
+        int passedCount = (int) results.stream().filter(r -> r.isPassed()).count();
+        int failedCount = totalRules - passedCount;
+
+        // Put the details in the model
         model.addAttribute("application", application);
         model.addAttribute("results", results);
+        model.addAttribute("totalRules", totalRules);
+        model.addAttribute("passedCount", passedCount);
+        model.addAttribute("failedCount", failedCount);
 
         return "ranrulesDetails";
     }
 }
+<br/>
 5.4) TestController.java
-A simple “health check” or test endpoint.
+Basic REST endpoint to confirm the application is running.
 
 java
 Copy
@@ -452,6 +475,7 @@ public class TestController {
         return "Test endpoint is working!";
     }
 }
+<br/>
 6) Model Classes
 6.1) ApplicationData.java
 java
@@ -469,16 +493,10 @@ public class ApplicationData {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /**
-     * Key-value pairs for each field, e.g. { "name":"Alice", "age":"30", ... }
-     */
     @ElementCollection
-    private Map<String, String> fieldValues;
+    private Map<String, String> fieldValues; // e.g. {"age":"25", "sales":"1000"}
 
-    /**
-     * A textual summary of the outcome, e.g. "Ran 3 rules, 2 passed"
-     */
-    private String finalDecision;
+    private String finalDecision; // e.g. "Ran 3 rule(s), Passed 2, Failed 1"
 
     public ApplicationData() {
     }
@@ -507,6 +525,7 @@ public class ApplicationData {
         this.finalDecision = finalDecision;
     }
 }
+<br/>
 6.2) FieldDefinition.java
 java
 Copy
@@ -524,7 +543,7 @@ public class FieldDefinition {
 
     private String fieldName;     // e.g. "age", "sales"
     private String fieldType;     // e.g. "NUMBER", "TEXT"
-    private String defaultValue;  // e.g. "0", "N/A"
+    private String defaultValue;  // e.g. "0"
 
     public FieldDefinition() {
     }
@@ -563,6 +582,7 @@ public class FieldDefinition {
         this.defaultValue = defaultValue;
     }
 }
+<br/>
 6.3) RuleDefinition.java
 java
 Copy
@@ -578,8 +598,13 @@ public class RuleDefinition {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String expression;   // e.g. "age > 18", "sales >= 500"
-    private String description;  // e.g. "Check adult age", "High sales check"
+    /**
+     * Expression like "age > 18" or "sales >= 500".
+     * For multiple conditions, you'd need a more advanced parser or logic.
+     */
+    private String expression;
+
+    private String description;
 
     public RuleDefinition() {
     }
@@ -609,6 +634,7 @@ public class RuleDefinition {
         this.description = description;
     }
 }
+<br/>
 6.4) RuleResult.java
 java
 Copy
@@ -645,6 +671,7 @@ public class RuleResult {
         return message;
     }
 }
+<br/>
 7) Repository Interfaces
 7.1) ApplicationDataRepository.java
 java
@@ -679,8 +706,11 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface RuleDefinitionRepository extends JpaRepository<RuleDefinition, Long> {
 }
+<br/>
 8) Service Classes
 8.1) DataService.java
+Manages CRUD for fields, rules, and applications.
+
 java
 Copy
 Edit
@@ -711,7 +741,7 @@ public class DataService {
         this.appRepo = appRepo;
     }
 
-    // --- Fields ---
+    // Fields
     public List<FieldDefinition> getAllFields() {
         return fieldRepo.findAll();
     }
@@ -720,7 +750,7 @@ public class DataService {
         return fieldRepo.save(fieldDefinition);
     }
 
-    // --- Rules ---
+    // Rules
     public List<RuleDefinition> getAllRules() {
         return ruleRepo.findAll();
     }
@@ -733,7 +763,7 @@ public class DataService {
         return ruleRepo.findById(id).orElse(null);
     }
 
-    // --- Applications ---
+    // Applications
     public ApplicationData saveApplicationData(ApplicationData applicationData) {
         return appRepo.save(applicationData);
     }
@@ -746,8 +776,9 @@ public class DataService {
         return appRepo.findById(id).orElse(null);
     }
 }
+<br/>
 8.2) RulesEngineService.java
-A very simple “expression parser” for numeric comparisons. For advanced logic, use SpEL, MVEL, Drools, etc.
+Evaluates rules. We added a very naive parser that only supports single-operator expressions (e.g. "age > 18"). For multiple conditions (e.g. "age>20 AND age<19 OR age=18"), you need a more advanced approach.
 
 java
 Copy
@@ -766,9 +797,6 @@ import java.util.Map;
 @Service
 public class RulesEngineService {
 
-    /**
-     * Evaluate each rule for the given application.
-     */
     public List<RuleResult> evaluateRules(ApplicationData applicationData, List<RuleDefinition> rules) {
         Map<String, String> fieldValues = applicationData.getFieldValues();
         List<RuleResult> results = new ArrayList<>();
@@ -776,6 +804,7 @@ public class RulesEngineService {
         for (RuleDefinition rule : rules) {
             boolean passed = evaluateExpression(rule.getExpression(), fieldValues);
             String message = passed ? "Rule Passed" : "Rule Failed";
+
             results.add(new RuleResult(
                     rule.getId(),
                     rule.getDescription(),
@@ -783,13 +812,12 @@ public class RulesEngineService {
                     message
             ));
         }
-
         return results;
     }
 
     /**
-     * Splits rule expressions like "age > 18" into [fieldName, operator, value].
-     * Then does numeric comparison if possible.
+     * Splits a string like "age > 18" into [fieldName, operator, ruleValue],
+     * compares numeric values if possible.
      */
     private boolean evaluateExpression(String expression, Map<String, String> fieldValues) {
         if (expression == null || expression.trim().isEmpty()) {
@@ -800,42 +828,42 @@ public class RulesEngineService {
             if (parts.length == 3) {
                 String fieldName = parts[0];
                 String operator = parts[1];
-                String ruleValueStr = parts[2];
+                String thresholdStr = parts[2];
 
-                String actualValueStr = fieldValues.get(fieldName); // e.g. "25"
+                String actualValueStr = fieldValues.get(fieldName);
                 if (actualValueStr == null) {
-                    return false; // field is missing => fail
+                    return false; // field not provided => fail
                 }
 
-                double actualValue = Double.parseDouble(actualValueStr);
-                double ruleValue = Double.parseDouble(ruleValueStr);
+                double actualVal = Double.parseDouble(actualValueStr);
+                double thresholdVal = Double.parseDouble(thresholdStr);
 
                 switch (operator) {
                     case ">":
-                        return actualValue > ruleValue;
+                        return actualVal > thresholdVal;
                     case ">=":
-                        return actualValue >= ruleValue;
+                        return actualVal >= thresholdVal;
                     case "<":
-                        return actualValue < ruleValue;
+                        return actualVal < thresholdVal;
                     case "<=":
-                        return actualValue <= ruleValue;
+                        return actualVal <= thresholdVal;
                     case "==":
-                        return actualValue == ruleValue;
+                        return actualVal == thresholdVal;
                     default:
                         return false;
                 }
             }
         } catch (Exception e) {
-            // parse error => fail
             e.printStackTrace();
             return false;
         }
         return false;
     }
 }
+<br/>
 9) Thymeleaf Templates
 9.1) home.html
-Lists existing applications only. Includes a button to go to /createApplication.
+Lists existing applications and a button to go to /createApplication.
 
 html
 Copy
@@ -849,9 +877,6 @@ Edit
     <style>
         body {
             margin: 20px;
-        }
-        .app-list {
-            margin-top: 20px;
         }
         .app-item {
             margin-bottom: 8px;
@@ -875,7 +900,7 @@ Edit
     </div>
 
     <h2>Existing Applications</h2>
-    <div class="app-list">
+    <div>
         <div th:each="app : ${applications}" class="app-item">
             <strong>ID:</strong> <span th:text="${app.id}"></span> |
             <span class="decision" th:text="${app.finalDecision}"></span>
@@ -887,8 +912,9 @@ Edit
 </div>
 </body>
 </html>
+<br/>
 9.2) createApplication.html
-Form to create an application. Displays each of the 30 fields (or however many exist in DB) with default values. Submits to /submitApplication.
+A form listing all fields with default values. Submits to /submitApplication.
 
 html
 Copy
@@ -916,9 +942,7 @@ Edit
     <form action="/submitApplication" method="post">
         <div th:each="field : ${fields}" class="field-group">
             <label th:text="${field.fieldName} + ' (' + field.fieldType + ')'"></label>
-            <!-- Hidden input to carry the 'fieldName' -->
             <input type="hidden" name="fieldNames" th:value="${field.fieldName}"/>
-            <!-- Text input to override default value -->
             <input type="text" class="form-control"
                    name="fieldValues"
                    th:value="${fieldMap[field.fieldName]}"/>
@@ -929,9 +953,12 @@ Edit
 </div>
 </body>
 </html>
+<br/>
 9.3) rulesConfig.html
-Manage fields and rules. This is unchanged from your existing code except it references the fields that are already in the DB from DataInitializer.
-
+Lists existing fields (ID, name, type, default value).
+Lets you add a new field.
+Lists existing rules.
+Lets you add a new rule with dropdowns for field + operator, plus a text box for the value, plus a description.
 html
 Copy
 Edit
@@ -983,11 +1010,11 @@ Edit
             <div class="col-md-3">
                 <label>Field Type</label>
                 <input class="form-control" type="text" name="fieldType"
-                       placeholder="TEXT, NUMBER, etc." />
+                       placeholder="TEXT, NUMBER, etc."/>
             </div>
             <div class="col-md-3">
                 <label>Default Value</label>
-                <input class="form-control" type="text" name="defaultValue" />
+                <input class="form-control" type="text" name="defaultValue"/>
             </div>
             <div class="col-md-3 align-self-end">
                 <button class="btn btn-primary" type="submit">Add Field</button>
@@ -1013,7 +1040,7 @@ Edit
                 <td th:text="${rule.expression}"></td>
                 <td th:text="${rule.description}"></td>
                 <td>
-                    <a class="btn btn-sm btn-info"
+                    <a class="btn btn-sm btn-info" 
                        th:href="@{|/rulesConfig/editRule/${rule.id}|}">
                         Edit
                     </a>
@@ -1026,17 +1053,45 @@ Edit
     <div class="block">
         <h3>Add Rule</h3>
         <form action="/rulesConfig/addRule" method="post" class="row g-3">
-            <div class="col-md-4">
-                <label>Expression (e.g. age > 18)</label>
-                <input class="form-control" type="text" name="expression" required/>
+
+            <!-- Field dropdown -->
+            <div class="col-md-3">
+                <label>Field</label>
+                <select name="selectedField" class="form-control">
+                    <option th:each="f : ${fields}"
+                            th:value="${f.fieldName}"
+                            th:text="${f.fieldName}"></option>
+                </select>
             </div>
-            <div class="col-md-4">
+
+            <!-- Operator dropdown -->
+            <div class="col-md-2">
+                <label>Operator</label>
+                <select name="operator" class="form-control">
+                    <option value=">">&gt;</option>
+                    <option value=">=">&gt;=</option>
+                    <option value="<">&lt;</option>
+                    <option value="<=">&lt;=</option>
+                    <option value="==">==</option>
+                </select>
+            </div>
+
+            <!-- Value input -->
+            <div class="col-md-2">
+                <label>Value</label>
+                <input class="form-control" type="text" name="ruleValue"/>
+            </div>
+
+            <!-- Description -->
+            <div class="col-md-3">
                 <label>Description</label>
-                <input class="form-control" type="text" name="description" />
+                <input class="form-control" type="text" name="description"/>
             </div>
-            <div class="col-md-4 align-self-end">
+
+            <div class="col-md-2 align-self-end">
                 <button class="btn btn-primary" type="submit">Add Rule</button>
             </div>
+
         </form>
     </div>
 
@@ -1045,8 +1100,9 @@ Edit
 </div>
 </body>
 </html>
+<br/>
 9.4) editRule.html
-Unchanged from before: editing an existing rule.
+Allows editing an existing rule’s raw expression & description.
 
 html
 Copy
@@ -1074,16 +1130,19 @@ Edit
     <div th:if="${rule != null}">
         <form th:action="@{/rulesConfig/updateRule}" method="post">
             <input type="hidden" name="id" th:value="${rule.id}" />
+
             <div class="mb-3">
                 <label>Expression</label>
                 <input class="form-control" type="text" name="expression"
                        th:value="${rule.expression}" required/>
             </div>
+
             <div class="mb-3">
                 <label>Description</label>
                 <input class="form-control" type="text" name="description"
                        th:value="${rule.description}" />
             </div>
+
             <button class="btn btn-primary" type="submit">Update Rule</button>
             <a class="btn btn-secondary" href="/rulesConfig">Cancel</a>
         </form>
@@ -1091,8 +1150,9 @@ Edit
 </div>
 </body>
 </html>
+<br/>
 9.5) ranrules.html
-Lists all applications with a link to view details.
+Lists all applications, with a link to “View Details” for each.
 
 html
 Copy
@@ -1139,8 +1199,9 @@ Edit
 </div>
 </body>
 </html>
+<br/>
 9.6) ranrulesDetails.html
-Displays the results of each rule for the chosen application.
+Shows the results of each rule for the chosen application, plus a summary: “Ran X rules, Passed Y, Failed Z”.
 
 html
 Copy
@@ -1174,8 +1235,19 @@ Edit
     </div>
 
     <div th:if="${application != null}">
-        <p>Application ID: <strong th:text="${application.id}"></strong></p>
-        <p>Final Decision: <strong th:text="${application.finalDecision}"></strong></p>
+        <p>Application ID:
+            <strong th:text="${application.id}"></strong>
+        </p>
+        <p>Final Decision:
+            <strong th:text="${application.finalDecision}"></strong>
+        </p>
+
+        <!-- Summary: total, passed, failed -->
+        <p>
+            <strong>Ran</strong> <span th:text="${totalRules}"></span> 
+            <strong>rule(s), Passed</strong> <span th:text="${passedCount}"></span>, 
+            <strong>Failed</strong> <span th:text="${failedCount}"></span>
+        </p>
 
         <h3>Rule Results</h3>
         <table class="table table-bordered">
@@ -1203,6 +1275,7 @@ Edit
 </div>
 </body>
 </html>
+<br/>
 9.7) test.html (Optional)
 html
 Copy
@@ -1214,41 +1287,40 @@ Edit
 </head>
 <body>
 <h1>Test Page</h1>
-<p>Use this page for manual testing or debugging if needed.</p>
+<p>Use this page for any manual testing or debugging if needed.</p>
 </body>
 </html>
-How To Run
-Build the project in the root folder:
+<br/>
+How to Run
+Build:
 bash
 Copy
 Edit
 mvn clean install
-Start the Spring Boot application:
+Start the application:
 bash
 Copy
 Edit
 mvn spring-boot:run
 Open your browser:
-http://localhost:8080/home: Home page – shows existing apps, link to create a new one.
-http://localhost:8080/createApplication: Form to create a new application (30 fields).
-http://localhost:8080/rulesConfig: Manage fields/rules.
-http://localhost:8080/ranrules: View rule runs/results.
-http://localhost:8080/test: Simple test endpoint.
-http://localhost:8080/h2-console: H2 DB console (JDBC URL: jdbc:h2:mem:rulesdb, user: sa, no password).
-When you first run, the DataInitializer automatically loads 30 fields. At /createApplication, you will see these fields with default values. You can adjust them, submit, and see the new application on /home. The rules (if any) get run automatically upon submission, and the final decision is saved.
+http://localhost:8080/home – see existing applications, link to “Create New Application”
+http://localhost:8080/createApplication – fill out the 30 fields, submit
+http://localhost:8080/rulesConfig – manage fields & rules
+Notice “Add Rule” has a dropdown for existing fields, another for operators, plus a text value
+http://localhost:8080/ranrules – see all applications, “View Details” runs the rules again, showing pass/fail
+http://localhost:8080/test – simple test endpoint
+http://localhost:8080/h2-console – H2 DB console (username sa, no password)
+When you create a new application, it runs all rules, sets finalDecision (like “Ran 2 rule(s), Passed 1, Failed 1”).
+When you view details for a specific application, you see exactly the pass/fail results for that application.
 
-This setup gives you exactly what you asked for:
+Summary
+The “View Details” page is specific to each application.id (no overlap).
+It shows how many rules were run, how many passed, how many failed, and each rule’s pass/fail.
+The “Add Rule” form includes a dropdown for fields and operators, building a single-condition expression (e.g. “age > 20”).
+If you need multiple conditions (age > 20 AND age < 19 OR age = 18), you must expand the parser or store multiple sub-rules.
+This should satisfy your requirements:
 
-A Create Application page
-30 fields automatically inserted
-The ability to fill them in and submit them
-Basic styling with Bootstrap
-A separate “Home” page that only lists existing applications (no creation form)
-Enjoy!
-
-
-
-
-
-
-
+View details is specific to each application ID.
+Summaries include passed / failed counts.
+A dropdown to select a field when creating a rule.
+The entire code is updated to reflect these changes. Enjoy!
