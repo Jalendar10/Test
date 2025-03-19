@@ -1,0 +1,690 @@
+1. Folder Structure
+css
+Copy
+Edit
+my-spring-boot-rules/
+├── pom.xml
+├── src
+│   └── main
+│       ├── java
+│       │   └── com
+│       │       └── example
+│       │           └── rulesapp
+│       │               ├── RulesAppApplication.java
+│       │               ├── controller
+│       │               │   ├── HomeController.java
+│       │               │   ├── RulesConfigController.java
+│       │               │   ├── RanRulesController.java
+│       │               │   └── TestController.java
+│       │               ├── model
+│       │               │   ├── ApplicationData.java
+│       │               │   ├── FieldDefinition.java
+│       │               │   ├── RuleDefinition.java
+│       │               │   └── RuleResult.java
+│       │               ├── repository
+│       │               │   ├── ApplicationDataRepository.java
+│       │               │   ├── FieldDefinitionRepository.java
+│       │               │   └── RuleDefinitionRepository.java
+│       │               └── service
+│       │                   ├── RulesEngineService.java
+│       │                   └── DataService.java
+│       └── resources
+│           ├── application.properties
+│           └── templates
+│               ├── home.html
+│               ├── rulesConfig.html
+│               ├── editRule.html
+│               ├── ranrules.html
+│               ├── ranrulesDetails.html
+│               └── test.html
+└── ...
+The key changes from the previous version:
+
+FieldDefinition: Added defaultValue.
+UI: Uses the field definitions’ defaultValue for the application form.
+Rule editing: A new template editRule.html and controller methods.
+2. FieldDefinition.java
+Add a new field called defaultValue:
+
+java
+Copy
+Edit
+package com.example.rulesapp.model;
+
+import javax.persistence.*;
+
+@Entity
+public class FieldDefinition {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private String fieldName;
+    private String fieldType;   // e.g. TEXT, NUMBER, etc.
+    private String defaultValue; // e.g. "0", "N/A", etc.
+
+    public FieldDefinition() {
+    }
+
+    public FieldDefinition(String fieldName, String fieldType, String defaultValue) {
+        this.fieldName = fieldName;
+        this.fieldType = fieldType;
+        this.defaultValue = defaultValue;
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public String getFieldName() {
+        return fieldName;
+    }
+
+    public void setFieldName(String fieldName) {
+        this.fieldName = fieldName;
+    }
+
+    public String getFieldType() {
+        return fieldType;
+    }
+
+    public void setFieldType(String fieldType) {
+        this.fieldType = fieldType;
+    }
+
+    public String getDefaultValue() {
+        return defaultValue;
+    }
+
+    public void setDefaultValue(String defaultValue) {
+        this.defaultValue = defaultValue;
+    }
+}
+3. HomeController.java
+When building the application submission form, we’ll pre-populate default values for each field. The user can override them.
+
+java
+Copy
+Edit
+package com.example.rulesapp.controller;
+
+import com.example.rulesapp.model.ApplicationData;
+import com.example.rulesapp.model.FieldDefinition;
+import com.example.rulesapp.service.DataService;
+import com.example.rulesapp.service.RulesEngineService;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.HashMap;
+import java.util.Map;
+
+@Controller
+public class HomeController {
+
+    private final DataService dataService;
+    private final RulesEngineService rulesEngineService;
+
+    public HomeController(DataService dataService, RulesEngineService rulesEngineService) {
+        this.dataService = dataService;
+        this.rulesEngineService = rulesEngineService;
+    }
+
+    @GetMapping({"/", "/home"})
+    public String home(Model model) {
+        model.addAttribute("applications", dataService.getAllApplications());
+        model.addAttribute("fields", dataService.getAllFields());
+        return "home";
+    }
+
+    /**
+     * Show a form with all fields and pre-populate their default values.
+     */
+    @GetMapping("/createApplication")
+    public String showCreateApplicationForm(Model model) {
+        // Retrieve all FieldDefinitions
+        var fieldDefs = dataService.getAllFields();
+
+        // Build a map of fieldName -> defaultValue
+        Map<String, String> fieldNameToDefault = new HashMap<>();
+        fieldDefs.forEach(fd -> {
+            // If defaultValue is null, we can store an empty string
+            fieldNameToDefault.put(fd.getFieldName(), fd.getDefaultValue() == null ? "" : fd.getDefaultValue());
+        });
+
+        model.addAttribute("fields", fieldDefs);
+        model.addAttribute("fieldMap", fieldNameToDefault);
+
+        return "createApplication";  // A new template for clarity
+    }
+
+    /**
+     * Process the form submission and create the application in DB.
+     */
+    @PostMapping("/submitApplication")
+    public String submitApplication(
+        @RequestParam("fieldNames") String[] fieldNames,
+        @RequestParam("fieldValues") String[] fieldValues
+    ) {
+        // Construct a map of fieldName -> value
+        Map<String, String> appFieldMap = new HashMap<>();
+        for (int i = 0; i < fieldNames.length; i++) {
+            appFieldMap.put(fieldNames[i], fieldValues[i]);
+        }
+
+        // Create and save the application
+        ApplicationData applicationData = new ApplicationData(appFieldMap);
+        applicationData = dataService.saveApplicationData(applicationData);
+
+        // Optional: evaluate rules immediately here
+        // (Or you can do it later in /ranrules)
+        var rules = dataService.getAllRules();
+        var results = rulesEngineService.evaluateRules(applicationData, rules);
+        int countPassed = (int) results.stream().filter(r -> r.isPassed()).count();
+        String decisionMsg = String.format("Ran %d rule(s), %d passed", results.size(), countPassed);
+        applicationData.setFinalDecision(decisionMsg);
+        dataService.saveApplicationData(applicationData);
+
+        return "redirect:/home";
+    }
+}
+In the above controller:
+
+We added a new route /createApplication to open a form where each FieldDefinition is shown with its defaultValue.
+On submit, we construct a new ApplicationData record and save it in the database.
+Optionally we run the rules immediately and set a “final decision” string that includes the number of rules run/passed.
+4. Updated Thymeleaf Templates
+4a. home.html
+A simple homepage that lists existing applications and provides a button to “Create New Application”.
+We’ll also add some minimal CSS (inline or with a Bootstrap CDN link) for styling.
+
+html
+Copy
+Edit
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Home - Rules App</title>
+    <!-- Minimal styling or Bootstrap CDN -->
+    <link rel="stylesheet" 
+          href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">
+    <style>
+        body {
+            margin: 20px;
+        }
+        .app-list {
+            margin-top: 20px;
+        }
+        .app-item {
+            margin-bottom: 10px;
+        }
+        .decision {
+            font-style: italic;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Rules App - Home</h1>
+    <hr/>
+
+    <div class="mb-3">
+        <a class="btn btn-primary" href="/createApplication">Create New Application</a>
+        <a class="btn btn-secondary" href="/rulesConfig">Manage Fields/Rules</a>
+        <a class="btn btn-info" href="/ranrules">Check Run Rules</a>
+        <a class="btn btn-outline-success" href="/test">Test Endpoint</a>
+    </div>
+
+    <!-- List existing applications -->
+    <h2>Existing Applications</h2>
+    <div class="app-list">
+        <div th:each="app : ${applications}" class="app-item">
+            <strong>App ID:</strong> <span th:text="${app.id}"></span> |
+            <span class="decision" th:text="${app.finalDecision}"></span>
+        </div>
+        <div th:if="${applications.size() == 0}">
+            No applications found.
+        </div>
+    </div>
+</div>
+</body>
+</html>
+4b. createApplication.html
+A new template showing each field and its default value in a form.
+Note: If you prefer fewer templates, you can merge this into home.html, but separating can be cleaner.
+
+html
+Copy
+Edit
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Create Application - Rules App</title>
+    <link rel="stylesheet" 
+          href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">
+    <style>
+        body {
+            margin: 20px;
+        }
+        .field-group {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Create New Application</h1>
+    <hr/>
+    <form action="/submitApplication" method="post">
+        <div th:each="field : ${fields}" class="field-group">
+            <label th:text="${field.fieldName} + ' (' + field.fieldType + ')'"></label>
+            <input type="hidden" name="fieldNames" th:value="${field.fieldName}" />
+            <!-- Pre-fill with the defaultValue from 'fieldMap' -->
+            <input type="text" name="fieldValues" 
+                   th:value="${fieldMap[field.fieldName]}"/>
+        </div>
+        <button class="btn btn-primary" type="submit">Submit Application</button>
+        <a class="btn btn-secondary" href="/home">Cancel</a>
+    </form>
+</div>
+</body>
+</html>
+4c. rulesConfig.html
+Now we include the defaultValue input for new fields, plus a link to edit a rule:
+
+html
+Copy
+Edit
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Rules Config</title>
+    <link rel="stylesheet" 
+          href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">
+    <style>
+        body {
+            margin: 20px;
+        }
+        .block {
+            margin-bottom: 30px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Rules Configuration</h1>
+    <hr/>
+
+    <div class="block">
+        <h2>Existing Fields</h2>
+        <table class="table table-bordered">
+            <thead>
+            <tr>
+                <th>ID</th>
+                <th>Field Name</th>
+                <th>Field Type</th>
+                <th>Default Value</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="field : ${fields}">
+                <td th:text="${field.id}"></td>
+                <td th:text="${field.fieldName}"></td>
+                <td th:text="${field.fieldType}"></td>
+                <td th:text="${field.defaultValue}"></td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="block">
+        <h3>Add Field</h3>
+        <form action="/rulesConfig/addField" method="post" class="row g-3">
+            <div class="col-md-3">
+                <label>Field Name:</label>
+                <input class="form-control" type="text" name="fieldName" required/>
+            </div>
+            <div class="col-md-3">
+                <label>Field Type:</label>
+                <input class="form-control" type="text" name="fieldType" placeholder="TEXT, NUMBER, etc." />
+            </div>
+            <div class="col-md-3">
+                <label>Default Value:</label>
+                <input class="form-control" type="text" name="defaultValue" />
+            </div>
+            <div class="col-md-3 align-self-end">
+                <button class="btn btn-primary" type="submit">Add Field</button>
+            </div>
+        </form>
+    </div>
+
+    <hr/>
+    <div class="block">
+        <h2>Existing Rules</h2>
+        <table class="table table-striped">
+            <thead>
+            <tr>
+                <th>Rule ID</th>
+                <th>Expression</th>
+                <th>Description</th>
+                <th>Edit</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="rule : ${rules}">
+                <td th:text="${rule.id}"></td>
+                <td th:text="${rule.expression}"></td>
+                <td th:text="${rule.description}"></td>
+                <td>
+                    <a class="btn btn-sm btn-info" 
+                       th:href="@{|/rulesConfig/editRule/${rule.id}|}">
+                        Edit
+                    </a>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="block">
+        <h3>Add Rule</h3>
+        <form action="/rulesConfig/addRule" method="post" class="row g-3">
+            <div class="col-md-4">
+                <label>Expression (e.g. AGE > 18)</label>
+                <input class="form-control" type="text" name="expression" required/>
+            </div>
+            <div class="col-md-4">
+                <label>Description</label>
+                <input class="form-control" type="text" name="description" />
+            </div>
+            <div class="col-md-4 align-self-end">
+                <button class="btn btn-primary" type="submit">Add Rule</button>
+            </div>
+        </form>
+    </div>
+
+    <a class="btn btn-secondary" href="/home">Back to Home</a>
+</div>
+</body>
+</html>
+4d. editRule.html
+A new template that allows us to edit an existing rule.
+
+html
+Copy
+Edit
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Edit Rule</title>
+    <link rel="stylesheet" 
+          href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">
+    <style>
+        body {
+            margin: 20px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Edit Rule</h1>
+    <hr/>
+
+    <div th:if="${rule == null}">
+        <p>Rule not found.</p>
+        <a class="btn btn-secondary" href="/rulesConfig">Back</a>
+    </div>
+
+    <div th:if="${rule != null}">
+        <form th:action="@{/rulesConfig/updateRule}" method="post">
+            <input type="hidden" name="id" th:value="${rule.id}" />
+            <div class="mb-3">
+                <label>Expression</label>
+                <input class="form-control" type="text" name="expression" 
+                       th:value="${rule.expression}" required/>
+            </div>
+            <div class="mb-3">
+                <label>Description</label>
+                <input class="form-control" type="text" name="description" 
+                       th:value="${rule.description}" />
+            </div>
+            <button class="btn btn-primary" type="submit">Update Rule</button>
+            <a class="btn btn-secondary" href="/rulesConfig">Cancel</a>
+        </form>
+    </div>
+</div>
+</body>
+</html>
+4e. ranrules.html
+List of all applications and links to see how the rules ran, as before. We’ll just have minimal styling.
+
+html
+Copy
+Edit
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Ran Rules</title>
+    <link rel="stylesheet" 
+          href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">
+    <style>
+        body {
+            margin: 20px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Ran Rules Page</h1>
+    <hr/>
+
+    <h2>All Applications</h2>
+    <table class="table table-striped">
+        <thead>
+        <tr>
+            <th>Application ID</th>
+            <th>Final Decision</th>
+            <th>Details</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="app : ${applications}">
+            <td th:text="${app.id}"></td>
+            <td th:text="${app.finalDecision}"></td>
+            <td>
+                <a class="btn btn-sm btn-info" 
+                   th:href="@{|/ranrules/details/${app.id}|}">
+                    View Details
+                </a>
+            </td>
+        </tr>
+        </tbody>
+    </table>
+
+    <a class="btn btn-secondary" href="/home">Back to Home</a>
+</div>
+</body>
+</html>
+4f. ranrulesDetails.html
+Displays the results of each rule for a selected application.
+
+html
+Copy
+Edit
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Rule Details</title>
+    <link rel="stylesheet" 
+          href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">
+    <style>
+        body {
+            margin: 20px;
+        }
+        .passed {
+            color: green;
+        }
+        .failed {
+            color: red;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Rule Evaluation Results</h1>
+    <hr/>
+
+    <div th:if="${error}">
+        <p th:text="${error}"></p>
+        <a class="btn btn-secondary" href="/ranrules">Back</a>
+    </div>
+
+    <div th:if="${application != null}">
+        <p>Application ID: <strong th:text="${application.id}"></strong></p>
+        <p>Final Decision: <strong th:text="${application.finalDecision}"></strong></p>
+
+        <h3>Rule Results</h3>
+        <table class="table table-bordered">
+            <thead>
+            <tr>
+                <th>Rule ID</th>
+                <th>Description</th>
+                <th>Passed</th>
+                <th>Message</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="r : ${results}">
+                <td th:text="${r.ruleId}"></td>
+                <td th:text="${r.ruleDescription}"></td>
+                <td th:classappend="${r.passed} ? 'passed' : 'failed'" 
+                    th:text="${r.passed} ? 'Yes' : 'No'"></td>
+                <td th:text="${r.message}"></td>
+            </tr>
+            </tbody>
+        </table>
+
+        <a class="btn btn-secondary" href="/ranrules">Back</a>
+    </div>
+</div>
+</body>
+</html>
+5. Updated RulesConfigController.java
+We add methods to edit and update an existing rule:
+
+java
+Copy
+Edit
+package com.example.rulesapp.controller;
+
+import com.example.rulesapp.model.FieldDefinition;
+import com.example.rulesapp.model.RuleDefinition;
+import com.example.rulesapp.service.DataService;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.*;
+
+@Controller
+@RequestMapping("/rulesConfig")
+public class RulesConfigController {
+
+    private final DataService dataService;
+
+    public RulesConfigController(DataService dataService) {
+        this.dataService = dataService;
+    }
+
+    @GetMapping
+    public String showConfigPage(Model model) {
+        model.addAttribute("fields", dataService.getAllFields());
+        model.addAttribute("rules", dataService.getAllRules());
+        return "rulesConfig";
+    }
+
+    @PostMapping("/addField")
+    public String addField(@RequestParam String fieldName,
+                           @RequestParam String fieldType,
+                           @RequestParam(required = false) String defaultValue) {
+        if (defaultValue == null) defaultValue = "";
+        FieldDefinition field = new FieldDefinition(fieldName, fieldType, defaultValue);
+        dataService.createField(field);
+        return "redirect:/rulesConfig";
+    }
+
+    @PostMapping("/addRule")
+    public String addRule(@RequestParam String expression,
+                          @RequestParam String description) {
+        RuleDefinition rule = new RuleDefinition(expression, description);
+        dataService.createRule(rule);
+        return "redirect:/rulesConfig";
+    }
+
+    @GetMapping("/editRule/{id}")
+    public String editRuleForm(@PathVariable Long id, Model model) {
+        RuleDefinition rule = dataService.getRuleById(id);
+        model.addAttribute("rule", rule);
+        return "editRule";
+    }
+
+    @PostMapping("/updateRule")
+    public String updateRule(@RequestParam Long id,
+                             @RequestParam String expression,
+                             @RequestParam String description) {
+        RuleDefinition rule = dataService.getRuleById(id);
+        if (rule != null) {
+            rule.setExpression(expression);
+            rule.setDescription(description);
+            dataService.createRule(rule);  // re-save
+        }
+        return "redirect:/rulesConfig";
+    }
+}
+Note the getRuleById method is called from the DataService. If that doesn’t exist yet, add it there.
+
+6. DataService.java
+Add a new helper to fetch a single RuleDefinition by ID:
+
+java
+Copy
+Edit
+public RuleDefinition getRuleById(Long id) {
+    return ruleDefinitionRepository.findById(id).orElse(null);
+}
+Everything else remains similar to the earlier version.
+
+7. Quick Recap of the Flow
+Add Fields in /rulesConfig, including a defaultValue for each field.
+For example, name (TEXT, default="Unknown"), age (NUMBER, default="0"), sales (NUMBER, default="1000"), etc.
+Add/Edit Rules in /rulesConfig.
+For example, AGE > 18 → Adult check; sales >= 500 → Good Sales check; etc.
+Create Application via /createApplication:
+The app automatically shows all fields with their default values.
+The user can override them and click Submit.
+Rules Run: On form submit, we store the application data, run all rules, store a final decision like “Ran 2 rule(s), 1 passed.”
+View or Manage
+Home: Shows all applications with final decisions.
+Ran Rules: Lists all applications; view rule results in detail.
+8. Build and Run
+Same as before:
+
+bash
+Copy
+Edit
+mvn clean install
+mvn spring-boot:run
+Then visit:
+
+http://localhost:8080/home
+http://localhost:8080/createApplication
+http://localhost:8080/rulesConfig
+http://localhost:8080/ranrules
+http://localhost:8080/test
+http://localhost:8080/h2-console (username: sa, no password)
+9. Further Enhancements
+Validation: Check expression syntax or numeric conversions more robustly.
+More Operators: Add new operators (!=, == string compare, etc.).
+Conditional Logic: Use advanced rule engines (Drools, MVEL, SpEL, Easy Rules, etc.).
+UI / CSS: Integrate fully with modern front-end frameworks or advanced styling.
+Security: Add Spring Security to handle authentication/authorization.
+This updated example meets your requirements of handling default field values, creating a unique application with up to 30 (or more) fields, editing rules, counting how many rules ran, and providing a minimal but improved CSS styling. Use this as a starter and adapt as needed for your specific business logic or production environment
