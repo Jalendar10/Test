@@ -1,4 +1,4 @@
-1. Folder Structure
+Project Structure
 css
 Copy
 Edit
@@ -38,13 +38,410 @@ my-spring-boot-rules/
 │               ├── ranrulesDetails.html
 │               └── test.html
 └── ...
-The key changes from the previous version:
+Below is the full code for each file.
 
-FieldDefinition: Added defaultValue.
-UI: Uses the field definitions’ defaultValue for the application form.
-Rule editing: A new template editRule.html and controller methods.
-2. FieldDefinition.java
-Add a new field called defaultValue:
+1) pom.xml
+xml
+Copy
+Edit
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
+                             http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.example</groupId>
+    <artifactId>my-spring-boot-rules</artifactId>
+    <version>1.0.0</version>
+    <name>my-spring-boot-rules</name>
+
+    <properties>
+        <java.version>1.8</java.version>
+        <!-- Update to match your preferred Spring Boot version -->
+        <spring.boot.version>2.6.14</spring.boot.version>
+    </properties>
+
+    <dependencies>
+        <!-- Spring Boot Starter Web -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+            <version>${spring.boot.version}</version>
+        </dependency>
+
+        <!-- Spring Boot Starter Thymeleaf -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-thymeleaf</artifactId>
+            <version>${spring.boot.version}</version>
+        </dependency>
+
+        <!-- Spring Boot Starter Data JPA -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+            <version>${spring.boot.version}</version>
+        </dependency>
+
+        <!-- H2 Database (in-memory) -->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- Lombok (optional) -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>1.18.24</version>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Spring Boot Maven Plugin -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <version>${spring.boot.version}</version>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>
+2) application.properties
+properties
+Copy
+Edit
+spring.datasource.url=jdbc:h2:mem:rulesdb;DB_CLOSE_ON_EXIT=FALSE
+spring.datasource.driverClassName=org.h2.Driver
+spring.jpa.hibernate.ddl-auto=update
+
+spring.h2.console.enabled=true
+spring.h2.console.path=/h2-console
+This enables an in-memory H2 database and the H2 console at /h2-console.
+
+3) RulesAppApplication.java
+java
+Copy
+Edit
+package com.example.rulesapp;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class RulesAppApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(RulesAppApplication.class, args);
+    }
+}
+This is the main entry point for the Spring Boot application.
+
+4) Controller Classes
+4.1) HomeController.java
+Shows the home page, lists applications, and provides a form to create a new application with all defined fields (using default values if available). On submit, it saves the application, runs the rules, and sets a final decision message.
+
+java
+Copy
+Edit
+package com.example.rulesapp.controller;
+
+import com.example.rulesapp.model.ApplicationData;
+import com.example.rulesapp.model.FieldDefinition;
+import com.example.rulesapp.service.DataService;
+import com.example.rulesapp.service.RulesEngineService;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+
+import java.util.HashMap;
+import java.util.Map;
+
+@Controller
+public class HomeController {
+
+    private final DataService dataService;
+    private final RulesEngineService rulesEngineService;
+
+    public HomeController(DataService dataService, RulesEngineService rulesEngineService) {
+        this.dataService = dataService;
+        this.rulesEngineService = rulesEngineService;
+    }
+
+    /**
+     * Renders home page with:
+     * - A list of existing Applications
+     * - A form to create a new Application (prepopulated with default values)
+     */
+    @GetMapping({"/", "/home"})
+    public String home(Model model) {
+        // List all applications
+        model.addAttribute("applications", dataService.getAllApplications());
+        
+        // List all fields
+        var fields = dataService.getAllFields();
+        model.addAttribute("fields", fields);
+        
+        // Build a map of fieldName -> defaultValue (for display in the form)
+        Map<String, String> fieldNameToDefault = new HashMap<>();
+        for (FieldDefinition fd : fields) {
+            fieldNameToDefault.put(fd.getFieldName(),
+                    fd.getDefaultValue() == null ? "" : fd.getDefaultValue());
+        }
+        model.addAttribute("fieldMap", fieldNameToDefault);
+
+        return "home";
+    }
+
+    /**
+     * Processes the creation of a new Application.
+     * Builds an ApplicationData from the submitted field values.
+     * Immediately runs all rules and saves a final decision.
+     */
+    @PostMapping("/submitApplication")
+    public String submitApplication(
+            @RequestParam("fieldNames") String[] fieldNames,
+            @RequestParam("fieldValues") String[] fieldValues
+    ) {
+        // Construct map of fieldName -> value
+        Map<String, String> appFieldMap = new HashMap<>();
+        for (int i = 0; i < fieldNames.length; i++) {
+            appFieldMap.put(fieldNames[i], fieldValues[i]);
+        }
+
+        // Create and save the new application
+        ApplicationData applicationData = new ApplicationData(appFieldMap);
+        applicationData = dataService.saveApplicationData(applicationData);
+
+        // Evaluate rules right away (optional)
+        var allRules = dataService.getAllRules();
+        var results = rulesEngineService.evaluateRules(applicationData, allRules);
+
+        // Example final decision: "Ran X rules, Y passed"
+        int ruleCount = results.size();
+        int passedCount = (int) results.stream().filter(r -> r.isPassed()).count();
+        String decision = String.format("Ran %d rule(s), %d passed", ruleCount, passedCount);
+
+        applicationData.setFinalDecision(decision);
+        dataService.saveApplicationData(applicationData);
+
+        // Redirect back to home
+        return "redirect:/home";
+    }
+}
+4.2) RulesConfigController.java
+Lets you manage (CRUD) fields and rules. It also includes a route to edit an existing rule.
+
+java
+Copy
+Edit
+package com.example.rulesapp.controller;
+
+import com.example.rulesapp.model.FieldDefinition;
+import com.example.rulesapp.model.RuleDefinition;
+import com.example.rulesapp.service.DataService;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.*;
+
+@Controller
+@RequestMapping("/rulesConfig")
+public class RulesConfigController {
+
+    private final DataService dataService;
+
+    public RulesConfigController(DataService dataService) {
+        this.dataService = dataService;
+    }
+
+    @GetMapping
+    public String showConfigPage(Model model) {
+        // Show all fields and rules
+        model.addAttribute("fields", dataService.getAllFields());
+        model.addAttribute("rules", dataService.getAllRules());
+        return "rulesConfig";
+    }
+
+    @PostMapping("/addField")
+    public String addField(@RequestParam String fieldName,
+                           @RequestParam String fieldType,
+                           @RequestParam(required = false) String defaultValue) {
+        // If not provided, set defaultValue to empty
+        if (defaultValue == null) defaultValue = "";
+        FieldDefinition field = new FieldDefinition(fieldName, fieldType, defaultValue);
+        dataService.createField(field);
+        return "redirect:/rulesConfig";
+    }
+
+    @PostMapping("/addRule")
+    public String addRule(@RequestParam String expression,
+                          @RequestParam String description) {
+        RuleDefinition rule = new RuleDefinition(expression, description);
+        dataService.createRule(rule);
+        return "redirect:/rulesConfig";
+    }
+
+    @GetMapping("/editRule/{id}")
+    public String editRuleForm(@PathVariable Long id, Model model) {
+        RuleDefinition rule = dataService.getRuleById(id);
+        model.addAttribute("rule", rule);
+        return "editRule";
+    }
+
+    @PostMapping("/updateRule")
+    public String updateRule(@RequestParam Long id,
+                             @RequestParam String expression,
+                             @RequestParam String description) {
+        RuleDefinition rule = dataService.getRuleById(id);
+        if (rule != null) {
+            rule.setExpression(expression);
+            rule.setDescription(description);
+            dataService.createRule(rule); // re-save
+        }
+        return "redirect:/rulesConfig";
+    }
+}
+4.3) RanRulesController.java
+Shows a list of applications (that have presumably run rules) and allows you to view the detailed rule evaluation results for each.
+
+java
+Copy
+Edit
+package com.example.rulesapp.controller;
+
+import com.example.rulesapp.model.ApplicationData;
+import com.example.rulesapp.model.RuleDefinition;
+import com.example.rulesapp.model.RuleResult;
+import com.example.rulesapp.service.DataService;
+import com.example.rulesapp.service.RulesEngineService;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@Controller
+@RequestMapping("/ranrules")
+public class RanRulesController {
+
+    private final DataService dataService;
+    private final RulesEngineService rulesEngineService;
+
+    public RanRulesController(DataService dataService, RulesEngineService rulesEngineService) {
+        this.dataService = dataService;
+        this.rulesEngineService = rulesEngineService;
+    }
+
+    @GetMapping
+    public String viewRanRules(Model model) {
+        // Shows list of all applications
+        model.addAttribute("applications", dataService.getAllApplications());
+        return "ranrules";
+    }
+
+    @GetMapping("/details/{appId}")
+    public String viewRuleDetails(@PathVariable Long appId, Model model) {
+        ApplicationData application = dataService.getApplicationById(appId);
+        if (application == null) {
+            model.addAttribute("error", "Application not found.");
+            return "ranrules";
+        }
+
+        // Evaluate all rules again (or you could store results permanently if desired)
+        List<RuleDefinition> allRules = dataService.getAllRules();
+        List<RuleResult> results = rulesEngineService.evaluateRules(application, allRules);
+
+        model.addAttribute("application", application);
+        model.addAttribute("results", results);
+
+        return "ranrulesDetails";
+    }
+}
+4.4) TestController.java
+A simple REST controller to verify that the application is up.
+
+java
+Copy
+Edit
+package com.example.rulesapp.controller;
+
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+public class TestController {
+
+    @GetMapping("/test")
+    public String test() {
+        return "Test endpoint is working!";
+    }
+}
+5) Model Classes
+5.1) ApplicationData.java
+Represents the data for each created application. Stores a map of fieldName → value, plus a final decision string.
+
+java
+Copy
+Edit
+package com.example.rulesapp.model;
+
+import javax.persistence.*;
+import java.util.Map;
+
+@Entity
+public class ApplicationData {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    /**
+     * A map of fieldName -> value.
+     * Example: { "name":"Alice", "age":"30", "sales":"1000", ... }
+     */
+    @ElementCollection
+    private Map<String, String> fieldValues;
+
+    /**
+     * A simple string summarizing the final decision or outcome,
+     * e.g. "Ran 3 rules, 2 passed"
+     */
+    private String finalDecision;
+
+    public ApplicationData() {
+    }
+
+    public ApplicationData(Map<String, String> fieldValues) {
+        this.fieldValues = fieldValues;
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public Map<String, String> getFieldValues() {
+        return fieldValues;
+    }
+
+    public void setFieldValues(Map<String, String> fieldValues) {
+        this.fieldValues = fieldValues;
+    }
+
+    public String getFinalDecision() {
+        return finalDecision;
+    }
+
+    public void setFinalDecision(String finalDecision) {
+        this.finalDecision = finalDecision;
+    }
+}
+5.2) FieldDefinition.java
+Defines a field’s name, type (e.g., TEXT, NUMBER, etc.), and an optional default value.
 
 java
 Copy
@@ -55,13 +452,14 @@ import javax.persistence.*;
 
 @Entity
 public class FieldDefinition {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String fieldName;
-    private String fieldType;   // e.g. TEXT, NUMBER, etc.
-    private String defaultValue; // e.g. "0", "N/A", etc.
+    private String fieldName;     // e.g. "age", "sales", "cardType"
+    private String fieldType;     // e.g. "NUMBER", "TEXT"
+    private String defaultValue;  // optional default, e.g. "0", "N/A"
 
     public FieldDefinition() {
     }
@@ -100,104 +498,294 @@ public class FieldDefinition {
         this.defaultValue = defaultValue;
     }
 }
-3. HomeController.java
-When building the application submission form, we’ll pre-populate default values for each field. The user can override them.
+5.3) RuleDefinition.java
+Defines a rule as a simple expression (e.g., "AGE > 18") and a text description.
+You can later parse these expressions to evaluate them against an application’s fields.
 
 java
 Copy
 Edit
-package com.example.rulesapp.controller;
+package com.example.rulesapp.model;
+
+import javax.persistence.*;
+
+@Entity
+public class RuleDefinition {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private String expression;   // e.g. "AGE > 18", "sales >= 500"
+    private String description;  // e.g. "Check adult age", "High sales check"
+
+    public RuleDefinition() {
+    }
+
+    public RuleDefinition(String expression, String description) {
+        this.expression = expression;
+        this.description = description;
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public String getExpression() {
+        return expression;
+    }
+
+    public void setExpression(String expression) {
+        this.expression = expression;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+}
+5.4) RuleResult.java
+Represents the outcome of a single rule evaluation: whether it passed, any message, etc.
+
+java
+Copy
+Edit
+package com.example.rulesapp.model;
+
+public class RuleResult {
+
+    private Long ruleId;
+    private String ruleDescription;
+    private boolean passed;
+    private String message;
+
+    public RuleResult(Long ruleId, String ruleDescription, boolean passed, String message) {
+        this.ruleId = ruleId;
+        this.ruleDescription = ruleDescription;
+        this.passed = passed;
+        this.message = message;
+    }
+
+    public Long getRuleId() {
+        return ruleId;
+    }
+
+    public String getRuleDescription() {
+        return ruleDescription;
+    }
+
+    public boolean isPassed() {
+        return passed;
+    }
+
+    public String getMessage() {
+        return message;
+    }
+}
+6) Repository Interfaces
+6.1) ApplicationDataRepository.java
+java
+Copy
+Edit
+package com.example.rulesapp.repository;
+
+import com.example.rulesapp.model.ApplicationData;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface ApplicationDataRepository extends JpaRepository<ApplicationData, Long> {
+}
+6.2) FieldDefinitionRepository.java
+java
+Copy
+Edit
+package com.example.rulesapp.repository;
+
+import com.example.rulesapp.model.FieldDefinition;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface FieldDefinitionRepository extends JpaRepository<FieldDefinition, Long> {
+}
+6.3) RuleDefinitionRepository.java
+java
+Copy
+Edit
+package com.example.rulesapp.repository;
+
+import com.example.rulesapp.model.RuleDefinition;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface RuleDefinitionRepository extends JpaRepository<RuleDefinition, Long> {
+}
+7) Service Classes
+7.1) DataService.java
+Handles basic CRUD for fields, rules, and applications.
+
+java
+Copy
+Edit
+package com.example.rulesapp.service;
 
 import com.example.rulesapp.model.ApplicationData;
 import com.example.rulesapp.model.FieldDefinition;
-import com.example.rulesapp.service.DataService;
-import com.example.rulesapp.service.RulesEngineService;
-import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
-import org.springframework.web.bind.annotation.*;
+import com.example.rulesapp.model.RuleDefinition;
+import com.example.rulesapp.repository.ApplicationDataRepository;
+import com.example.rulesapp.repository.FieldDefinitionRepository;
+import com.example.rulesapp.repository.RuleDefinitionRepository;
+import org.springframework.stereotype.Service;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.List;
 
-@Controller
-public class HomeController {
+@Service
+public class DataService {
 
-    private final DataService dataService;
-    private final RulesEngineService rulesEngineService;
+    private final FieldDefinitionRepository fieldRepo;
+    private final RuleDefinitionRepository ruleRepo;
+    private final ApplicationDataRepository appRepo;
 
-    public HomeController(DataService dataService, RulesEngineService rulesEngineService) {
-        this.dataService = dataService;
-        this.rulesEngineService = rulesEngineService;
+    public DataService(FieldDefinitionRepository fieldRepo,
+                       RuleDefinitionRepository ruleRepo,
+                       ApplicationDataRepository appRepo) {
+        this.fieldRepo = fieldRepo;
+        this.ruleRepo = ruleRepo;
+        this.appRepo = appRepo;
     }
 
-    @GetMapping({"/", "/home"})
-    public String home(Model model) {
-        model.addAttribute("applications", dataService.getAllApplications());
-        model.addAttribute("fields", dataService.getAllFields());
-        return "home";
+    // --- Fields ---
+    public List<FieldDefinition> getAllFields() {
+        return fieldRepo.findAll();
     }
 
-    /**
-     * Show a form with all fields and pre-populate their default values.
-     */
-    @GetMapping("/createApplication")
-    public String showCreateApplicationForm(Model model) {
-        // Retrieve all FieldDefinitions
-        var fieldDefs = dataService.getAllFields();
-
-        // Build a map of fieldName -> defaultValue
-        Map<String, String> fieldNameToDefault = new HashMap<>();
-        fieldDefs.forEach(fd -> {
-            // If defaultValue is null, we can store an empty string
-            fieldNameToDefault.put(fd.getFieldName(), fd.getDefaultValue() == null ? "" : fd.getDefaultValue());
-        });
-
-        model.addAttribute("fields", fieldDefs);
-        model.addAttribute("fieldMap", fieldNameToDefault);
-
-        return "createApplication";  // A new template for clarity
+    public FieldDefinition createField(FieldDefinition fieldDefinition) {
+        return fieldRepo.save(fieldDefinition);
     }
 
-    /**
-     * Process the form submission and create the application in DB.
-     */
-    @PostMapping("/submitApplication")
-    public String submitApplication(
-        @RequestParam("fieldNames") String[] fieldNames,
-        @RequestParam("fieldValues") String[] fieldValues
-    ) {
-        // Construct a map of fieldName -> value
-        Map<String, String> appFieldMap = new HashMap<>();
-        for (int i = 0; i < fieldNames.length; i++) {
-            appFieldMap.put(fieldNames[i], fieldValues[i]);
-        }
+    // --- Rules ---
+    public List<RuleDefinition> getAllRules() {
+        return ruleRepo.findAll();
+    }
 
-        // Create and save the application
-        ApplicationData applicationData = new ApplicationData(appFieldMap);
-        applicationData = dataService.saveApplicationData(applicationData);
+    public RuleDefinition createRule(RuleDefinition ruleDefinition) {
+        return ruleRepo.save(ruleDefinition);
+    }
 
-        // Optional: evaluate rules immediately here
-        // (Or you can do it later in /ranrules)
-        var rules = dataService.getAllRules();
-        var results = rulesEngineService.evaluateRules(applicationData, rules);
-        int countPassed = (int) results.stream().filter(r -> r.isPassed()).count();
-        String decisionMsg = String.format("Ran %d rule(s), %d passed", results.size(), countPassed);
-        applicationData.setFinalDecision(decisionMsg);
-        dataService.saveApplicationData(applicationData);
+    public RuleDefinition getRuleById(Long id) {
+        return ruleRepo.findById(id).orElse(null);
+    }
 
-        return "redirect:/home";
+    // --- Applications ---
+    public ApplicationData saveApplicationData(ApplicationData applicationData) {
+        return appRepo.save(applicationData);
+    }
+
+    public List<ApplicationData> getAllApplications() {
+        return appRepo.findAll();
+    }
+
+    public ApplicationData getApplicationById(Long id) {
+        return appRepo.findById(id).orElse(null);
     }
 }
-In the above controller:
+7.2) RulesEngineService.java
+Evaluates the expressions in RuleDefinition against the application’s fields. This example has a very naive parser for expressions like "AGE > 18", "sales >= 500", etc.
 
-We added a new route /createApplication to open a form where each FieldDefinition is shown with its defaultValue.
-On submit, we construct a new ApplicationData record and save it in the database.
-Optionally we run the rules immediately and set a “final decision” string that includes the number of rules run/passed.
-4. Updated Thymeleaf Templates
-4a. home.html
-A simple homepage that lists existing applications and provides a button to “Create New Application”.
-We’ll also add some minimal CSS (inline or with a Bootstrap CDN link) for styling.
+java
+Copy
+Edit
+package com.example.rulesapp.service;
 
+import com.example.rulesapp.model.ApplicationData;
+import com.example.rulesapp.model.RuleDefinition;
+import com.example.rulesapp.model.RuleResult;
+import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+@Service
+public class RulesEngineService {
+
+    /**
+     * Evaluate a list of rules against the given ApplicationData.
+     */
+    public List<RuleResult> evaluateRules(ApplicationData applicationData, List<RuleDefinition> rules) {
+        Map<String, String> fieldValues = applicationData.getFieldValues();
+        List<RuleResult> results = new ArrayList<>();
+
+        for (RuleDefinition rule : rules) {
+            boolean passed = evaluateExpression(rule.getExpression(), fieldValues);
+            String message = passed ? "Rule Passed" : "Rule Failed";
+
+            results.add(new RuleResult(
+                    rule.getId(),
+                    rule.getDescription(),
+                    passed,
+                    message
+            ));
+        }
+
+        return results;
+    }
+
+    /**
+     * Very simplistic expression evaluator. 
+     * Assumes expressions like "AGE > 18" or "sales >= 500"
+     * Splits by space: [fieldName, operator, literalValue].
+     * For advanced usage, consider using SpEL, MVEL, or a real rule engine.
+     */
+    private boolean evaluateExpression(String expression, Map<String, String> fieldValues) {
+        if (expression == null || expression.trim().isEmpty()) {
+            return false;
+        }
+
+        try {
+            String[] parts = expression.split(" ");
+            if (parts.length == 3) {
+                String fieldName = parts[0];
+                String operator = parts[1];
+                String ruleValueStr = parts[2];
+
+                String actualValueStr = fieldValues.get(fieldName);
+                if (actualValueStr == null) {
+                    return false; // field not present => fail the rule
+                }
+
+                // Attempt numeric comparison
+                double actualValue = Double.parseDouble(actualValueStr);
+                double ruleValue = Double.parseDouble(ruleValueStr);
+
+                switch (operator) {
+                    case ">":
+                        return actualValue > ruleValue;
+                    case ">=":
+                        return actualValue >= ruleValue;
+                    case "<":
+                        return actualValue < ruleValue;
+                    case "<=":
+                        return actualValue <= ruleValue;
+                    case "==":
+                        return actualValue == ruleValue;
+                    default:
+                        return false;
+                }
+            }
+        } catch (Exception e) {
+            // In case of parse errors, consider it a fail
+            e.printStackTrace();
+            return false;
+        }
+
+        // If no match or invalid expression structure
+        return false;
+    }
+}
+8) Thymeleaf Templates
+8.1) home.html
+Displays existing applications (with final decisions).
+Provides a form to create a new application, pre-filled with each FieldDefinition’s default value.
 html
 Copy
 Edit
@@ -205,7 +793,7 @@ Edit
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
     <title>Home - Rules App</title>
-    <!-- Minimal styling or Bootstrap CDN -->
+    <!-- Minimal styling via Bootstrap -->
     <link rel="stylesheet" 
           href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">
     <style>
@@ -216,11 +804,14 @@ Edit
             margin-top: 20px;
         }
         .app-item {
-            margin-bottom: 10px;
+            margin-bottom: 8px;
         }
         .decision {
             font-style: italic;
             color: #555;
+        }
+        .field-group {
+            margin-bottom: 10px;
         }
     </style>
 </head>
@@ -230,7 +821,6 @@ Edit
     <hr/>
 
     <div class="mb-3">
-        <a class="btn btn-primary" href="/createApplication">Create New Application</a>
         <a class="btn btn-secondary" href="/rulesConfig">Manage Fields/Rules</a>
         <a class="btn btn-info" href="/ranrules">Check Run Rules</a>
         <a class="btn btn-outline-success" href="/test">Test Endpoint</a>
@@ -240,58 +830,32 @@ Edit
     <h2>Existing Applications</h2>
     <div class="app-list">
         <div th:each="app : ${applications}" class="app-item">
-            <strong>App ID:</strong> <span th:text="${app.id}"></span> |
+            <strong>ID:</strong> <span th:text="${app.id}"></span> |
             <span class="decision" th:text="${app.finalDecision}"></span>
         </div>
         <div th:if="${applications.size() == 0}">
             No applications found.
         </div>
     </div>
-</div>
-</body>
-</html>
-4b. createApplication.html
-A new template showing each field and its default value in a form.
-Note: If you prefer fewer templates, you can merge this into home.html, but separating can be cleaner.
 
-html
-Copy
-Edit
-<!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org">
-<head>
-    <title>Create Application - Rules App</title>
-    <link rel="stylesheet" 
-          href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">
-    <style>
-        body {
-            margin: 20px;
-        }
-        .field-group {
-            margin-bottom: 10px;
-        }
-    </style>
-</head>
-<body>
-<div class="container">
-    <h1>Create New Application</h1>
     <hr/>
+    <!-- Form to create a new application -->
+    <h2>Create New Application</h2>
     <form action="/submitApplication" method="post">
         <div th:each="field : ${fields}" class="field-group">
             <label th:text="${field.fieldName} + ' (' + field.fieldType + ')'"></label>
             <input type="hidden" name="fieldNames" th:value="${field.fieldName}" />
-            <!-- Pre-fill with the defaultValue from 'fieldMap' -->
-            <input type="text" name="fieldValues" 
-                   th:value="${fieldMap[field.fieldName]}"/>
+            <input type="text" class="form-control"
+                   name="fieldValues"
+                   th:value="${fieldMap[field.fieldName]}" />
         </div>
         <button class="btn btn-primary" type="submit">Submit Application</button>
-        <a class="btn btn-secondary" href="/home">Cancel</a>
     </form>
 </div>
 </body>
 </html>
-4c. rulesConfig.html
-Now we include the defaultValue input for new fields, plus a link to edit a rule:
+8.2) rulesConfig.html
+Displays and manages FieldDefinition (including defaultValue) and RuleDefinition. Also links to edit a rule.
 
 html
 Copy
@@ -303,12 +867,8 @@ Edit
     <link rel="stylesheet" 
           href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">
     <style>
-        body {
-            margin: 20px;
-        }
-        .block {
-            margin-bottom: 30px;
-        }
+        body { margin: 20px; }
+        .block { margin-bottom: 30px; }
     </style>
 </head>
 <body>
@@ -342,15 +902,16 @@ Edit
         <h3>Add Field</h3>
         <form action="/rulesConfig/addField" method="post" class="row g-3">
             <div class="col-md-3">
-                <label>Field Name:</label>
+                <label>Field Name</label>
                 <input class="form-control" type="text" name="fieldName" required/>
             </div>
             <div class="col-md-3">
-                <label>Field Type:</label>
-                <input class="form-control" type="text" name="fieldType" placeholder="TEXT, NUMBER, etc." />
+                <label>Field Type</label>
+                <input class="form-control" type="text" name="fieldType" 
+                       placeholder="TEXT, NUMBER, etc." />
             </div>
             <div class="col-md-3">
-                <label>Default Value:</label>
+                <label>Default Value</label>
                 <input class="form-control" type="text" name="defaultValue" />
             </div>
             <div class="col-md-3 align-self-end">
@@ -377,7 +938,7 @@ Edit
                 <td th:text="${rule.expression}"></td>
                 <td th:text="${rule.description}"></td>
                 <td>
-                    <a class="btn btn-sm btn-info" 
+                    <a class="btn btn-sm btn-info"
                        th:href="@{|/rulesConfig/editRule/${rule.id}|}">
                         Edit
                     </a>
@@ -404,12 +965,13 @@ Edit
         </form>
     </div>
 
+    <hr/>
     <a class="btn btn-secondary" href="/home">Back to Home</a>
 </div>
 </body>
 </html>
-4d. editRule.html
-A new template that allows us to edit an existing rule.
+8.3) editRule.html
+Lets you edit an existing rule.
 
 html
 Copy
@@ -421,9 +983,7 @@ Edit
     <link rel="stylesheet" 
           href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">
     <style>
-        body {
-            margin: 20px;
-        }
+        body { margin: 20px; }
     </style>
 </head>
 <body>
@@ -456,8 +1016,8 @@ Edit
 </div>
 </body>
 </html>
-4e. ranrules.html
-List of all applications and links to see how the rules ran, as before. We’ll just have minimal styling.
+8.4) ranrules.html
+Shows all applications. Each row has a link to view detailed rule results.
 
 html
 Copy
@@ -469,16 +1029,13 @@ Edit
     <link rel="stylesheet" 
           href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">
     <style>
-        body {
-            margin: 20px;
-        }
+        body { margin: 20px; }
     </style>
 </head>
 <body>
 <div class="container">
     <h1>Ran Rules Page</h1>
     <hr/>
-
     <h2>All Applications</h2>
     <table class="table table-striped">
         <thead>
@@ -506,8 +1063,8 @@ Edit
 </div>
 </body>
 </html>
-4f. ranrulesDetails.html
-Displays the results of each rule for a selected application.
+8.5) ranrulesDetails.html
+Displays the detailed RuleResult for a specific application.
 
 html
 Copy
@@ -519,14 +1076,14 @@ Edit
     <link rel="stylesheet" 
           href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">
     <style>
-        body {
-            margin: 20px;
-        }
+        body { margin: 20px; }
         .passed {
             color: green;
+            font-weight: bold;
         }
         .failed {
             color: red;
+            font-weight: bold;
         }
     </style>
 </head>
@@ -570,121 +1127,61 @@ Edit
 </div>
 </body>
 </html>
-5. Updated RulesConfigController.java
-We add methods to edit and update an existing rule:
+8.6) test.html (Optional)
+A simple placeholder page if you want a Thymeleaf-based test at /test – though in this example, /test returns a direct string from TestController.
 
-java
+html
 Copy
 Edit
-package com.example.rulesapp.controller;
-
-import com.example.rulesapp.model.FieldDefinition;
-import com.example.rulesapp.model.RuleDefinition;
-import com.example.rulesapp.service.DataService;
-import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
-import org.springframework.web.bind.annotation.*;
-
-@Controller
-@RequestMapping("/rulesConfig")
-public class RulesConfigController {
-
-    private final DataService dataService;
-
-    public RulesConfigController(DataService dataService) {
-        this.dataService = dataService;
-    }
-
-    @GetMapping
-    public String showConfigPage(Model model) {
-        model.addAttribute("fields", dataService.getAllFields());
-        model.addAttribute("rules", dataService.getAllRules());
-        return "rulesConfig";
-    }
-
-    @PostMapping("/addField")
-    public String addField(@RequestParam String fieldName,
-                           @RequestParam String fieldType,
-                           @RequestParam(required = false) String defaultValue) {
-        if (defaultValue == null) defaultValue = "";
-        FieldDefinition field = new FieldDefinition(fieldName, fieldType, defaultValue);
-        dataService.createField(field);
-        return "redirect:/rulesConfig";
-    }
-
-    @PostMapping("/addRule")
-    public String addRule(@RequestParam String expression,
-                          @RequestParam String description) {
-        RuleDefinition rule = new RuleDefinition(expression, description);
-        dataService.createRule(rule);
-        return "redirect:/rulesConfig";
-    }
-
-    @GetMapping("/editRule/{id}")
-    public String editRuleForm(@PathVariable Long id, Model model) {
-        RuleDefinition rule = dataService.getRuleById(id);
-        model.addAttribute("rule", rule);
-        return "editRule";
-    }
-
-    @PostMapping("/updateRule")
-    public String updateRule(@RequestParam Long id,
-                             @RequestParam String expression,
-                             @RequestParam String description) {
-        RuleDefinition rule = dataService.getRuleById(id);
-        if (rule != null) {
-            rule.setExpression(expression);
-            rule.setDescription(description);
-            dataService.createRule(rule);  // re-save
-        }
-        return "redirect:/rulesConfig";
-    }
-}
-Note the getRuleById method is called from the DataService. If that doesn’t exist yet, add it there.
-
-6. DataService.java
-Add a new helper to fetch a single RuleDefinition by ID:
-
-java
-Copy
-Edit
-public RuleDefinition getRuleById(Long id) {
-    return ruleDefinitionRepository.findById(id).orElse(null);
-}
-Everything else remains similar to the earlier version.
-
-7. Quick Recap of the Flow
-Add Fields in /rulesConfig, including a defaultValue for each field.
-For example, name (TEXT, default="Unknown"), age (NUMBER, default="0"), sales (NUMBER, default="1000"), etc.
-Add/Edit Rules in /rulesConfig.
-For example, AGE > 18 → Adult check; sales >= 500 → Good Sales check; etc.
-Create Application via /createApplication:
-The app automatically shows all fields with their default values.
-The user can override them and click Submit.
-Rules Run: On form submit, we store the application data, run all rules, store a final decision like “Ran 2 rule(s), 1 passed.”
-View or Manage
-Home: Shows all applications with final decisions.
-Ran Rules: Lists all applications; view rule results in detail.
-8. Build and Run
-Same as before:
-
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Test Page</title>
+</head>
+<body>
+<h1>Test Page</h1>
+<p>Use this page for any manual testing or debugging if needed.</p>
+</body>
+</html>
+How to Run
+From the project root, build with:
 bash
 Copy
 Edit
 mvn clean install
+Run the Spring Boot app:
+bash
+Copy
+Edit
 mvn spring-boot:run
-Then visit:
+Open your browser:
+http://localhost:8080/home – Home (list apps, create new app)
+http://localhost:8080/rulesConfig – Manage fields/rules
+http://localhost:8080/ranrules – View rule results
+http://localhost:8080/test – Test endpoint
+http://localhost:8080/h2-console – H2 database console
+(Use jdbc:h2:mem:rulesdb with username sa, no password)
+Summary
+This complete Spring Boot 1.8+ application demonstrates how to:
 
-http://localhost:8080/home
-http://localhost:8080/createApplication
-http://localhost:8080/rulesConfig
-http://localhost:8080/ranrules
-http://localhost:8080/test
-http://localhost:8080/h2-console (username: sa, no password)
-9. Further Enhancements
-Validation: Check expression syntax or numeric conversions more robustly.
-More Operators: Add new operators (!=, == string compare, etc.).
-Conditional Logic: Use advanced rule engines (Drools, MVEL, SpEL, Easy Rules, etc.).
-UI / CSS: Integrate fully with modern front-end frameworks or advanced styling.
-Security: Add Spring Security to handle authentication/authorization.
-This updated example meets your requirements of handling default field values, creating a unique application with up to 30 (or more) fields, editing rules, counting how many rules ran, and providing a minimal but improved CSS styling. Use this as a starter and adapt as needed for your specific business logic or production environment
+Define and store fields (with default values) in a DB.
+Configure rules as simple expressions (FIELD operator value).
+Create applications that auto-fill those fields, then run the rules.
+Show results and basic styling with Bootstrap in Thymeleaf.
+You can expand or customize this starter for more complex logic, a real rule engine (Drools, MVEL, SpEL, etc.), advanced UI frameworks, security, or production databases. Enjoy!
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ChatGPT can make mistakes. Check important info.
