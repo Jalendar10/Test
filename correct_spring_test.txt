@@ -1,3 +1,15 @@
+http://localhost:8080/ranrules
+
+
+Ran Rules Page
+All Applications
+Application ID	Final Decision	Details
+2	Ran 0 rule(s), 0 passed, 0 failed	 view details
+
+
+here I am getting application id
+
+but when click on the view details
 http://localhost:8080/ranrules/details/2
 
 Rule Evaluation Results
@@ -5,14 +17,12 @@ Application ID:
 
 Final Decision:
 
-Ran 1 rule(s), Passed 1, Failed 0
-
+Ran 1 rule(s), Passed 0, Failed 1
+view application data
 Stored Rule Results
 Rule ID	Description	Passed	Message
 
 
-I m not gettin applicationid number but in the url I am having application id
- when I click on view application data 
-I am not getting data
-and 
-when I clicl on rule id(number) it show rule actual rule is
+
+1 rule ran which need to should show rule id and details which not showing and view application data is not showing
+and Application ID: is blank which need to show the ID which is Application ID)
