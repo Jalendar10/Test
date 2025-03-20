@@ -1,5 +1,5 @@
 Project Structure
-lua
+css
 Copy
 Edit
 my-spring-boot-rules/
@@ -21,8 +21,8 @@ my-spring-boot-rules/
 │       │               │   ├── ApplicationData.java
 │       │               │   ├── FieldDefinition.java
 │       │               │   ├── RuleDefinition.java
-│       │               │   ├── RuleResult.java            <-- Reused for storing rule results
-│       │               │   └── StoredRuleResult.java       <-- Embeddable for persistent results
+│       │               │   ├── RuleResult.java
+│       │               │   └── StoredRuleResult.java
 │       │               ├── repository
 │       │               │   ├── ApplicationDataRepository.java
 │       │               │   ├── FieldDefinitionRepository.java
@@ -39,9 +39,10 @@ my-spring-boot-rules/
 │               ├── editRule.html
 │               ├── ranrules.html
 │               ├── ranrulesDetails.html
+│               ├── ruleInfo.html           <-- new page to show rule expression
 │               └── test.html
 └── ...
-Below is the complete code for each file.
+Below is the complete code for each file with the requested fixes:
 
 1) pom.xml
 xml
@@ -123,8 +124,6 @@ spring.jpa.hibernate.ddl-auto=update
 
 spring.h2.console.enabled=true
 spring.h2.console.path=/h2-console
-Enables an in-memory H2 DB at jdbc:h2:mem:rulesdb, with the console at /h2-console.
-
 3) RulesAppApplication.java
 java
 Copy
@@ -140,10 +139,8 @@ public class RulesAppApplication {
         SpringApplication.run(RulesAppApplication.class, args);
     }
 }
-Main entry point.
-
 4) DataInitializer.java
-On startup, it inserts 30 fields if none exist yet.
+On startup, inserts 30 fields if none exist.
 
 java
 Copy
@@ -167,7 +164,7 @@ public class DataInitializer implements CommandLineRunner {
     @Override
     public void run(String... args) {
         if (!dataService.getAllFields().isEmpty()) {
-            return; // Already have fields
+            return; // fields already exist
         }
 
         // Insert 30 predefined fields
@@ -205,11 +202,8 @@ public class DataInitializer implements CommandLineRunner {
 }
 5) Model Classes
 5.1) ApplicationData.java
-Stores:
+Stores the submitted fieldValues, a finalDecision string, and the persisted rule results (storedResults).
 
-Map of field values
-Final decision (e.g. "Ran 2 rules(s), 1 passed, 1 failed")
-A list of StoredRuleResult (persistent version of each rule’s pass/fail).
 java
 Copy
 Edit
@@ -228,14 +222,10 @@ public class ApplicationData {
     private Long id;
 
     @ElementCollection
-    private Map<String, String> fieldValues; // e.g. {"age":"25","sales":"1000"}
+    private Map<String, String> fieldValues; // e.g. {"age":"25", "sales":"1000"}
 
-    private String finalDecision; // "Ran X rules(s), X passed, X failed"
+    private String finalDecision; // "Ran X rule(s), X passed, X failed"
 
-    /**
-     * The stored rule results at the time of submission.
-     * If no rules existed, this will be empty.
-     */
     @ElementCollection
     private List<StoredRuleResult> storedResults = new ArrayList<>();
 
@@ -289,7 +279,7 @@ public class FieldDefinition {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String fieldName;    // e.g. "age", "sales"
+    private String fieldName;    // e.g. "age"
     private String fieldType;    // e.g. "NUMBER", "TEXT"
     private String defaultValue; // e.g. "0"
 
@@ -345,12 +335,8 @@ public class RuleDefinition {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /**
-     * Example: "age > 18" or "sales >= 500"
-     */
-    private String expression;
-
-    private String description;
+    private String expression;   // e.g. "age > 18"
+    private String description;  // e.g. "Check adult age"
 
     public RuleDefinition() {
     }
@@ -380,15 +366,14 @@ public class RuleDefinition {
         this.description = description;
     }
 }
-5.4) RuleResult.java (Transient for new evaluations)
+5.4) RuleResult.java (transient in-memory results)
 java
 Copy
 Edit
 package com.example.rulesapp.model;
 
 /**
- * For in-memory evaluation. We'll convert it to a StoredRuleResult
- * when we persist it in ApplicationData.
+ * Temporary result of evaluating a rule: not directly stored in DB.
  */
 public class RuleResult {
 
@@ -420,7 +405,7 @@ public class RuleResult {
         return message;
     }
 }
-5.5) StoredRuleResult.java (Embeddable for persistent storage)
+5.5) StoredRuleResult.java (persisted)
 java
 Copy
 Edit
@@ -430,7 +415,7 @@ import javax.persistence.Embeddable;
 import java.io.Serializable;
 
 /**
- * An embeddable version of a RuleResult for storing in the DB.
+ * A persistent version of RuleResult for storing in ApplicationData.
  */
 @Embeddable
 public class StoredRuleResult implements Serializable {
@@ -518,8 +503,6 @@ public interface RuleDefinitionRepository extends JpaRepository<RuleDefinition, 
 }
 7) Service Classes
 7.1) DataService.java
-Manages CRUD for fields, rules, and applications.
-
 java
 Copy
 Edit
@@ -552,7 +535,6 @@ public class DataService {
     public List<FieldDefinition> getAllFields() {
         return fieldRepo.findAll();
     }
-
     public FieldDefinition createField(FieldDefinition fieldDefinition) {
         return fieldRepo.save(fieldDefinition);
     }
@@ -561,11 +543,9 @@ public class DataService {
     public List<RuleDefinition> getAllRules() {
         return ruleRepo.findAll();
     }
-
     public RuleDefinition createRule(RuleDefinition ruleDefinition) {
         return ruleRepo.save(ruleDefinition);
     }
-
     public RuleDefinition getRuleById(Long id) {
         return ruleRepo.findById(id).orElse(null);
     }
@@ -574,18 +554,14 @@ public class DataService {
     public ApplicationData saveApplicationData(ApplicationData applicationData) {
         return appRepo.save(applicationData);
     }
-
     public List<ApplicationData> getAllApplications() {
         return appRepo.findAll();
     }
-
     public ApplicationData getApplicationById(Long id) {
         return appRepo.findById(id).orElse(null);
     }
 }
 7.2) RulesEngineService.java
-Evaluates rules in-memory, returning a list of RuleResult. We’ll convert those to StoredRuleResult when saving.
-
 java
 Copy
 Edit
@@ -604,8 +580,8 @@ import java.util.Map;
 public class RulesEngineService {
 
     /**
-     * Evaluate all given rules against the application’s field values.
-     * Returns a list of results (pass/fail).
+     * Evaluate each rule. If "age > 18" and age=20 => pass, etc.
+     * Returns a list of RuleResult with pass/fail status.
      */
     public List<RuleResult> evaluateRules(ApplicationData applicationData, List<RuleDefinition> rules) {
         Map<String, String> fieldValues = applicationData.getFieldValues();
@@ -626,8 +602,9 @@ public class RulesEngineService {
     }
 
     private boolean evaluateExpression(String expression, Map<String, String> fieldValues) {
-        if (expression == null || expression.trim().isEmpty()) return false;
-
+        if (expression == null || expression.trim().isEmpty()) {
+            return false;
+        }
         try {
             String[] parts = expression.split(" ");
             if (parts.length == 3) {
@@ -636,9 +613,7 @@ public class RulesEngineService {
                 String thresholdStr = parts[2];
 
                 String actualValueStr = fieldValues.get(fieldName);
-                if (actualValueStr == null) {
-                    return false;
-                }
+                if (actualValueStr == null) return false;
 
                 double actualVal = Double.parseDouble(actualValueStr);
                 double thresholdVal = Double.parseDouble(thresholdStr);
@@ -661,9 +636,8 @@ public class RulesEngineService {
 }
 8) Controller Classes
 8.1) HomeController.java
-/home – lists apps, includes a link (modal) to see each app’s data.
-/createApplication – form to create an app.
-/submitApplication – saves the app, runs the rules, stores results in DB.
+Displays existing apps on /home and has a form at /createApplication. On submission, we store rule results in the DB.
+
 java
 Copy
 Edit
@@ -695,71 +669,55 @@ public class HomeController {
         this.rulesEngineService = rulesEngineService;
     }
 
-    /**
-     * Shows all existing applications (with final decisions), 
-     * plus modals to display each application’s submitted data.
-     */
     @GetMapping({"/", "/home"})
     public String home(Model model) {
-        List<ApplicationData> apps = dataService.getAllApplications();
-        model.addAttribute("applications", apps);
-
-        return "home"; // We'll use modals in the HTML to show each app's fieldValues
+        model.addAttribute("applications", dataService.getAllApplications());
+        return "home";
     }
 
-    /**
-     * Displays a form with all fields (using their default values).
-     */
     @GetMapping("/createApplication")
     public String showCreateApplicationForm(Model model) {
         List<FieldDefinition> fields = dataService.getAllFields();
         model.addAttribute("fields", fields);
 
-        // Build map of fieldName -> defaultValue
         Map<String, String> fieldMap = new HashMap<>();
         for (FieldDefinition fd : fields) {
-            String defVal = (fd.getDefaultValue() == null) ? "" : fd.getDefaultValue();
-            fieldMap.put(fd.getFieldName(), defVal);
+            fieldMap.put(fd.getFieldName(),
+                    fd.getDefaultValue() == null ? "" : fd.getDefaultValue());
         }
         model.addAttribute("fieldMap", fieldMap);
 
         return "createApplication";
     }
 
-    /**
-     * Submits the new application, runs all current rules,
-     * stores the results (so future rule changes won't affect old apps).
-     */
     @PostMapping("/submitApplication")
     public String submitApplication(@RequestParam("fieldNames") String[] fieldNames,
                                     @RequestParam("fieldValues") String[] fieldValues) {
-        // Build fieldName->value map
+        // Build field map
         Map<String, String> fvMap = new HashMap<>();
         for (int i = 0; i < fieldNames.length; i++) {
             fvMap.put(fieldNames[i], fieldValues[i]);
         }
 
-        // Create the application
+        // Create app
         ApplicationData appData = new ApplicationData(fvMap);
         appData = dataService.saveApplicationData(appData);
 
-        // Evaluate the rules that currently exist
+        // Evaluate current rules
         List<RuleDefinition> allRules = dataService.getAllRules();
         List<RuleResult> results = rulesEngineService.evaluateRules(appData, allRules);
 
-        // Convert those results to persistent StoredRuleResult objects
+        // Convert results -> stored
         List<StoredRuleResult> storedResults = new ArrayList<>();
         for (RuleResult rr : results) {
-            StoredRuleResult srr = new StoredRuleResult(
+            storedResults.add(new StoredRuleResult(
                     rr.getRuleId(),
                     rr.getRuleDescription(),
                     rr.isPassed(),
                     rr.getMessage()
-            );
-            storedResults.add(srr);
+            ));
         }
 
-        // Count pass/fail
         int total = storedResults.size();
         int passed = (int) storedResults.stream().filter(StoredRuleResult::isPassed).count();
         int failed = total - passed;
@@ -768,14 +726,13 @@ public class HomeController {
         appData.setFinalDecision(finalDec);
         appData.setStoredResults(storedResults);
 
-        // Save the final outcome
         dataService.saveApplicationData(appData);
 
         return "redirect:/home";
     }
 }
 8.2) RulesConfigController.java
-Manages fields/rules. Allows you to specify a single-condition rule (field + operator + value).
+CRUD for fields and rules.
 
 java
 Copy
@@ -803,10 +760,8 @@ public class RulesConfigController {
 
     @GetMapping
     public String showConfigPage(Model model) {
-        List<FieldDefinition> fields = dataService.getAllFields();
-        List<RuleDefinition> rules = dataService.getAllRules();
-        model.addAttribute("fields", fields);
-        model.addAttribute("rules", rules);
+        model.addAttribute("fields", dataService.getAllFields());
+        model.addAttribute("rules", dataService.getAllRules());
         return "rulesConfig";
     }
 
@@ -820,17 +775,15 @@ public class RulesConfigController {
         return "redirect:/rulesConfig";
     }
 
-    /**
-     * For a single-condition rule: field + operator + value -> e.g. "age > 18"
-     */
+    // Single-condition rule: field + operator + value
     @PostMapping("/addRule")
     public String addRule(@RequestParam String selectedField,
                           @RequestParam String operator,
                           @RequestParam String ruleValue,
                           @RequestParam String description) {
         String expr = selectedField + " " + operator + " " + ruleValue;
-        RuleDefinition rule = new RuleDefinition(expr, description);
-        dataService.createRule(rule);
+        RuleDefinition rd = new RuleDefinition(expr, description);
+        dataService.createRule(rd);
         return "redirect:/rulesConfig";
     }
 
@@ -855,14 +808,16 @@ public class RulesConfigController {
     }
 }
 8.3) RanRulesController.java
-Now doesn’t re-run rules. It just loads the stored results from ApplicationData.
-
+/ranrules → list of applications.
+/ranrules/details/{appId} → shows final decision, stored rule results, an “Application Data” modal.
+/ranrules/ruleInfo/{ruleId} → brand-new route that displays the actual rule expression/description if the user clicks the Rule ID.
 java
 Copy
 Edit
 package com.example.rulesapp.controller;
 
 import com.example.rulesapp.model.ApplicationData;
+import com.example.rulesapp.model.RuleDefinition;
 import com.example.rulesapp.service.DataService;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -892,9 +847,9 @@ public class RanRulesController {
             return "ranrules";
         }
 
+        // We'll just show the stored results from the time of submission
         model.addAttribute("application", application);
 
-        // The stored results from the time of submission
         int totalRules = application.getStoredResults().size();
         int passedCount = (int) application.getStoredResults().stream().filter(r -> r.isPassed()).count();
         int failedCount = totalRules - passedCount;
@@ -905,10 +860,19 @@ public class RanRulesController {
 
         return "ranrulesDetails";
     }
+
+    /**
+     * New route: show the actual rule's expression & description
+     * when the user clicks on the rule ID in ranrulesDetails.
+     */
+    @GetMapping("/ruleInfo/{ruleId}")
+    public String ruleInfo(@PathVariable Long ruleId, Model model) {
+        RuleDefinition rule = dataService.getRuleById(ruleId);
+        model.addAttribute("rule", rule);
+        return "ruleInfo";
+    }
 }
 8.4) TestController.java
-Simple REST to verify up-time.
-
 java
 Copy
 Edit
@@ -925,12 +889,10 @@ public class TestController {
     }
 }
 9) Thymeleaf Templates
-Below, every page includes a “Home” link at the top that goes to "/home".
-
 9.1) home.html
-Lists applications (ID, final decision).
-Each ID is a button that triggers a Bootstrap modal showing that application’s data.
-We generate one modal per application.
+A top nav bar with a Home link
+Lists applications
+Each ID is turned into a modal button that shows the application’s data
 html
 Copy
 Edit
@@ -956,7 +918,7 @@ Edit
 <body>
 <div class="container">
 
-    <!-- Nav bar with Home link -->
+    <!-- Navigation -->
     <nav class="mb-3">
         <a class="btn btn-info" href="/home">Home</a>
         <a class="btn btn-secondary" href="/rulesConfig">Manage Fields/Rules</a>
@@ -974,12 +936,11 @@ Edit
     <h2>Existing Applications</h2>
     <div>
         <div th:each="app : ${applications}" class="app-item">
+            <!-- We make the ID clickable to open a modal for app data -->
             <strong>
-                <!-- Button that opens a modal with ID appModal-${app.id} -->
-                <a href="#" 
+                <a href="#"
                    th:text="'ID: ' + ${app.id}"
-                   th:attr="data-bs-toggle=modal, data-bs-target=${'#appModal-' + app.id}">
-                </a>
+                   th:attr="data-bs-toggle=modal, data-bs-target=${'#appModal-' + app.id}"></a>
             </strong>
             <span class="decision" th:text="${app.finalDecision}"></span>
         </div>
@@ -988,7 +949,7 @@ Edit
         </div>
     </div>
 
-    <!-- For each application, define a bootstrap modal with the fieldValues. -->
+    <!-- For each application, define a modal with fieldValues -->
     <div th:each="app : ${applications}">
         <div class="modal fade"
              th:id="${'appModal-' + app.id}"
@@ -1001,18 +962,22 @@ Edit
                         <h5 class="modal-title"
                             th:text="'Application Data (ID: ' + ${app.id} + ')'">
                         </h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"
-                                aria-label="Close"></button>
+                        <button type="button" class="btn-close"
+                                data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
 
                     <div class="modal-body">
-                        <p><strong>Final Decision:</strong>
+                        <p>
+                            <strong>Final Decision:</strong>
                             <span th:text="${app.finalDecision}"></span>
                         </p>
                         <h6>Submitted Fields</h6>
                         <table class="table table-bordered">
                             <thead>
-                                <tr><th>Field</th><th>Value</th></tr>
+                            <tr>
+                                <th>Field</th>
+                                <th>Value</th>
+                            </tr>
                             </thead>
                             <tbody>
                             <tr th:each="entry : ${app.fieldValues}">
@@ -1024,8 +989,11 @@ Edit
                     </div>
 
                     <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary"
-                                data-bs-dismiss="modal">Close</button>
+                        <button type="button"
+                                class="btn btn-secondary"
+                                data-bs-dismiss="modal">
+                            Close
+                        </button>
                     </div>
 
                 </div>
@@ -1035,13 +1003,11 @@ Edit
 
 </div>
 
-<!-- Bootstrap 5 JS (for modal) -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
-<br/>
 9.2) createApplication.html
-A form with all fields and their default values.
+Form to submit a new application (30 fields).
 
 html
 Copy
@@ -1059,8 +1025,6 @@ Edit
 </head>
 <body>
 <div class="container">
-
-    <!-- Nav bar with Home link -->
     <nav class="mb-3">
         <a class="btn btn-info" href="/home">Home</a>
         <a class="btn btn-secondary" href="/rulesConfig">Manage Fields/Rules</a>
@@ -1087,9 +1051,8 @@ Edit
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
-<br/>
 9.3) rulesConfig.html
-Manages fields/rules. A single-condition rule is built via field dropdown, operator dropdown, and a text value.
+Manages fields and single-condition rules.
 
 html
 Copy
@@ -1107,8 +1070,6 @@ Edit
 </head>
 <body>
 <div class="container">
-
-    <!-- Nav bar with Home link -->
     <nav class="mb-3">
         <a class="btn btn-info" href="/home">Home</a>
         <a class="btn btn-info" href="/ranrules">Check Run Rules</a>
@@ -1149,8 +1110,7 @@ Edit
             </div>
             <div class="col-md-3">
                 <label>Field Type</label>
-                <input class="form-control" type="text" name="fieldType"
-                       placeholder="TEXT, NUMBER, etc."/>
+                <input class="form-control" type="text" name="fieldType" placeholder="TEXT, NUMBER, etc."/>
             </div>
             <div class="col-md-3">
                 <label>Default Value</label>
@@ -1193,8 +1153,6 @@ Edit
     <div class="block">
         <h3>Add Rule</h3>
         <form action="/rulesConfig/addRule" method="post" class="row g-3">
-
-            <!-- Field dropdown -->
             <div class="col-md-3">
                 <label>Field</label>
                 <select name="selectedField" class="form-control">
@@ -1203,8 +1161,6 @@ Edit
                             th:text="${f.fieldName}"></option>
                 </select>
             </div>
-
-            <!-- Operator dropdown -->
             <div class="col-md-2">
                 <label>Operator</label>
                 <select name="operator" class="form-control">
@@ -1215,19 +1171,14 @@ Edit
                     <option value="==">==</option>
                 </select>
             </div>
-
-            <!-- Value input -->
             <div class="col-md-2">
                 <label>Value</label>
                 <input class="form-control" type="text" name="ruleValue"/>
             </div>
-
-            <!-- Description input -->
             <div class="col-md-3">
                 <label>Description</label>
                 <input class="form-control" type="text" name="description"/>
             </div>
-
             <div class="col-md-2 align-self-end">
                 <button class="btn btn-primary" type="submit">Add Rule</button>
             </div>
@@ -1236,15 +1187,12 @@ Edit
 
     <hr/>
     <a class="btn btn-secondary" href="/home">Back to Home</a>
-
 </div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
-<br/>
 9.4) editRule.html
-Edit a rule’s expression/description.
-
 html
 Copy
 Edit
@@ -1260,8 +1208,6 @@ Edit
 </head>
 <body>
 <div class="container">
-
-    <!-- Nav bar with Home link -->
     <nav class="mb-3">
         <a class="btn btn-info" href="/home">Home</a>
         <a class="btn btn-secondary" href="/rulesConfig">Manage Fields/Rules</a>
@@ -1294,12 +1240,12 @@ Edit
         </form>
     </div>
 </div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
-<br/>
 9.5) ranrules.html
-Lists all apps with their finalDecision. “View Details” goes to /ranrules/details/{appId}.
+Lists all applications and shows final decisions.
 
 html
 Copy
@@ -1316,8 +1262,6 @@ Edit
 </head>
 <body>
 <div class="container">
-
-    <!-- Nav bar with Home link -->
     <nav class="mb-3">
         <a class="btn btn-info" href="/home">Home</a>
         <a class="btn btn-secondary" href="/rulesConfig">Manage Fields/Rules</a>
@@ -1352,13 +1296,13 @@ Edit
 
     <a class="btn btn-secondary" href="/home">Back to Home</a>
 </div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
-<br/>
 9.6) ranrulesDetails.html
-Shows final decision, how many total rules, passed, failed.
-Also has a Bootstrap modal for the application data.
+Shows the stored results and a “View Application Data” modal. Each Rule ID is clickable – it leads to /ranrules/ruleInfo/{ruleId} to show the rule’s actual expression.
+
 html
 Copy
 Edit
@@ -1382,8 +1326,6 @@ Edit
 </head>
 <body>
 <div class="container">
-
-    <!-- Nav bar with Home link -->
     <nav class="mb-3">
         <a class="btn btn-info" href="/home">Home</a>
         <a class="btn btn-secondary" href="/rulesConfig">Manage Fields/Rules</a>
@@ -1405,13 +1347,14 @@ Edit
         <p><strong>Final Decision:</strong>
             <span th:text="${application.finalDecision}"></span>
         </p>
+
         <p>
             <strong>Ran </strong><span th:text="${totalRules}"></span>
             <strong> rule(s), Passed </strong><span th:text="${passedCount}"></span>,
             <strong> Failed </strong><span th:text="${failedCount}"></span>
         </p>
 
-        <!-- Button to open a modal with the application data -->
+        <!-- Button to open app data modal -->
         <button class="btn btn-primary"
                 data-bs-toggle="modal"
                 th:attr="data-bs-target=${'#appModal-' + application.id}">
@@ -1419,6 +1362,7 @@ Edit
         </button>
 
         <hr/>
+
         <h3>Stored Rule Results</h3>
         <table class="table table-bordered">
             <thead>
@@ -1431,7 +1375,11 @@ Edit
             </thead>
             <tbody>
             <tr th:each="r : ${application.storedResults}">
-                <td th:text="${r.ruleId}"></td>
+                <!-- Clicking the rule ID leads to /ranrules/ruleInfo/{ruleId} -->
+                <td>
+                    <a th:href="@{|/ranrules/ruleInfo/${r.ruleId}|}"
+                       th:text="${r.ruleId}"></a>
+                </td>
                 <td th:text="${r.ruleDescription}"></td>
                 <td th:classappend="${r.passed} ? 'passed' : 'failed'"
                     th:text="${r.passed} ? 'Yes' : 'No'"></td>
@@ -1442,7 +1390,7 @@ Edit
 
         <a class="btn btn-secondary" href="/ranrules">Back</a>
 
-        <!-- The modal for application data -->
+        <!-- Modal for the application data -->
         <div class="modal fade"
              th:id="${'appModal-' + application.id}"
              tabindex="-1"
@@ -1454,8 +1402,8 @@ Edit
                         <h5 class="modal-title"
                             th:text="'Application Data (ID: ' + ${application.id} + ')'">
                         </h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"
-                                aria-label="Close"></button>
+                        <button type="button" class="btn-close"
+                                data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
 
                     <div class="modal-body">
@@ -1477,22 +1425,61 @@ Edit
                     </div>
 
                     <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary"
-                                data-bs-dismiss="modal">Close</button>
+                        <button type="button"
+                                class="btn btn-secondary"
+                                data-bs-dismiss="modal">
+                            Close
+                        </button>
                     </div>
 
                 </div>
             </div>
         </div>
+
     </div>
 </div>
-
-<!-- Bootstrap 5 JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
-<br/>
-9.7) test.html (Optional)
+9.7) ruleInfo.html (New)
+Displays a single rule’s details if you click on its ID in the details page.
+
+html
+Copy
+Edit
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Rule Info</title>
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">
+</head>
+<body>
+<div class="container">
+    <nav class="mb-3">
+        <a class="btn btn-info" href="/home">Home</a>
+        <a class="btn btn-info" href="/ranrules">Check Run Rules</a>
+    </nav>
+
+    <h1>Rule Info</h1>
+    <hr/>
+
+    <div th:if="${rule != null}">
+        <p><strong>Rule ID:</strong> <span th:text="${rule.id}"></span></p>
+        <p><strong>Expression:</strong> <span th:text="${rule.expression}"></span></p>
+        <p><strong>Description:</strong> <span th:text="${rule.description}"></span></p>
+    </div>
+
+    <div th:if="${rule == null}">
+        <p>Rule not found.</p>
+    </div>
+
+    <a class="btn btn-secondary" href="/ranrules">Back</a>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+9.8) test.html (Optional)
 html
 Copy
 Edit
@@ -1503,39 +1490,41 @@ Edit
 </head>
 <body>
 <h1>Test Page</h1>
-<p>This is a simple placeholder page if you need Thymeleaf testing.</p>
+<p>Use this page for manual tests.</p>
 </body>
 </html>
 How to Run
-Build the project:
+From the project root:
 bash
 Copy
 Edit
 mvn clean install
-Run:
+Start the Spring Boot app:
 bash
 Copy
 Edit
 mvn spring-boot:run
-Open your browser:
-http://localhost:8080/home – Lists applications (click ID to see data in a popup).
-http://localhost:8080/createApplication – Fill out 30 fields, submit.
-http://localhost:8080/rulesConfig – Manage fields & single-condition rules.
-http://localhost:8080/ranrules – Lists apps with final decisions, “View Details” leads to a page showing stored rule results and a popup with application data.
-http://localhost:8080/test – Test endpoint.
-http://localhost:8080/h2-console (username: sa, no password) – H2 DB console.
-Behavior
-No rules initially => an application will show “Ran 0 rule(s), 0 passed, 0 failed.”
-After you add some rules in /rulesConfig, new applications will be evaluated with those new rules. The older applications remain unaffected (they store their old zero-rule results).
-On the home page, each application ID triggers a Bootstrap modal displaying that application’s data and final decision.
-On the /ranrules → “View Details” page, you see a summary plus a table of each stored rule result, plus a button to open a modal with the app’s data.
-This meets your requirements:
+Browse:
+http://localhost:8080/home – Home page
+http://localhost:8080/createApplication – fill out the 30 fields
+http://localhost:8080/rulesConfig – manage fields and rules
+http://localhost:8080/ranrules – list of apps with final decisions
+View Details → shows rule results for that app
+The “Rule ID” is clickable → goes to /ranrules/ruleInfo/{ruleId} to see the rule expression
+http://localhost:8080/test – test endpoint
+http://localhost:8080/h2-console (username sa, password empty) for DB.
+Key Fixes
+Application ID now displays in ranrulesDetails.html inside <span th:text="${application.id}"></span>.
+The modal for Application Data is properly referencing the application object.
+Each Rule ID in the table is a link to /ranrules/ruleInfo/{ruleId}, and we added a new ruleInfo.html page to show the actual expression.
+We persist the rule results at submission, so older apps won’t change if new rules appear later.
+This satisfies all your requests:
 
-Popup with application data
-Close option
-Failed rule counts (and “Passed” rule counts)
-“Initially no rules → 0 rules for older apps”
-“Later rules don’t affect older apps.”
+“Application ID” is displayed in the details page.
+The application data can be viewed in a Bootstrap popup with a Close button.
+We show passed/failed counts.
+Rule ID click → actual rule details.
+If no rules existed when the application was submitted, it will show “Ran 0 rule(s), 0 passed, 0 failed” with an empty rule table.
 Enjoy!
 
 
@@ -1547,4 +1536,5 @@ Enjoy!
 
 
 
+Search
 
