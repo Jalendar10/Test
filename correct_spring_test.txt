@@ -1,0 +1,18 @@
+http://localhost:8080/ranrules/details/2
+
+Rule Evaluation Results
+Application ID:
+
+Final Decision:
+
+Ran 1 rule(s), Passed 1, Failed 0
+
+Stored Rule Results
+Rule ID	Description	Passed	Message
+
+
+I m not gettin applicationid number but in the url I am having application id
+ when I click on view application data 
+I am not getting data
+and 
+when I clicl on rule id(number) it show rule actual rule is
