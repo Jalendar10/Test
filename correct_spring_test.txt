@@ -1,28 +1,265 @@
-http://localhost:8080/ranrules
+RanRulesController.java
+java
+Copy
+Edit
+package com.example.rulesapp.controller;
+
+import com.example.rulesapp.model.ApplicationData;
+import com.example.rulesapp.model.RuleDefinition;
+import com.example.rulesapp.service.DataService;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.*;
+
+@Controller
+@RequestMapping("/ranrules")
+public class RanRulesController {
+
+    private final DataService dataService;
+
+    public RanRulesController(DataService dataService) {
+        this.dataService = dataService;
+    }
+
+    /**
+     * Lists all applications with their final decisions.
+     */
+    @GetMapping
+    public String viewRanRules(Model model) {
+        model.addAttribute("applications", dataService.getAllApplications());
+        return "ranrules";
+    }
+
+    /**
+     * Shows the stored (persisted) rule results for a specific application, 
+     * including a button to view the application data in a modal.
+     */
+    @GetMapping("/details/{appId}")
+    public String viewRuleDetails(@PathVariable Long appId, Model model) {
+        ApplicationData application = dataService.getApplicationById(appId);
+        if (application == null) {
+            model.addAttribute("error", "Application not found.");
+            return "ranrules";
+        }
+
+        // Add the application to the model
+        model.addAttribute("application", application);
+
+        // Summaries
+        int totalRules = application.getStoredResults().size();
+        int passedCount = (int) application.getStoredResults().stream()
+            .filter(r -> r.isPassed()).count();
+        int failedCount = totalRules - passedCount;
+
+        model.addAttribute("totalRules", totalRules);
+        model.addAttribute("passedCount", passedCount);
+        model.addAttribute("failedCount", failedCount);
+
+        return "ranrulesDetails"; 
+    }
+
+    /**
+     * New route: if the user clicks on "Rule ID" in the results table, 
+     * show the actual rule expression/description in a simple page.
+     */
+    @GetMapping("/ruleInfo/{ruleId}")
+    public String ruleInfo(@PathVariable Long ruleId, Model model) {
+        RuleDefinition rule = dataService.getRuleById(ruleId);
+        model.addAttribute("rule", rule);
+        return "ruleInfo";
+    }
+}
+ranrulesDetails.html
+html
+Copy
+Edit
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Rule Details</title>
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">
+    <style>
+        body { margin: 20px; }
+        .passed {
+            color: green;
+            font-weight: bold;
+        }
+        .failed {
+            color: red;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <!-- Navbar -->
+    <nav class="mb-3">
+        <a class="btn btn-info" href="/home">Home</a>
+        <a class="btn btn-secondary" href="/rulesConfig">Manage Fields/Rules</a>
+        <a class="btn btn-info" href="/ranrules">Check Run Rules</a>
+    </nav>
+
+    <h1>Rule Evaluation Results</h1>
+    <hr/>
+
+    <!-- If application not found -->
+    <div th:if="${error}">
+        <p th:text="${error}"></p>
+        <a class="btn btn-secondary" href="/ranrules">Back</a>
+    </div>
+
+    <!-- If the application is valid, display details -->
+    <div th:if="${application != null}">
+
+        <p><strong>Application ID:</strong>
+            <span th:text="${application.id}"></span>
+        </p>
+
+        <p><strong>Final Decision:</strong>
+            <span th:text="${application.finalDecision}"></span>
+        </p>
+
+        <p>
+            <strong>Ran </strong><span th:text="${totalRules}"></span>
+            <strong> rule(s), Passed </strong><span th:text="${passedCount}"></span>,
+            <strong> Failed </strong><span th:text="${failedCount}"></span>
+        </p>
+
+        <!-- Button to open a modal with the application data -->
+        <button class="btn btn-primary"
+                data-bs-toggle="modal"
+                th:attr="data-bs-target=${'#appModal-' + application.id}">
+            View Application Data
+        </button>
+
+        <hr/>
+
+        <h3>Stored Rule Results</h3>
+        <table class="table table-bordered">
+            <thead>
+            <tr>
+                <th>Rule ID</th>
+                <th>Description</th>
+                <th>Passed</th>
+                <th>Message</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="r : ${application.storedResults}">
+                <!-- Make the Rule ID clickable to see the actual rule info -->
+                <td>
+                    <a th:href="@{|/ranrules/ruleInfo/${r.ruleId}|}"
+                       th:text="${r.ruleId}"></a>
+                </td>
+                <td th:text="${r.ruleDescription}"></td>
+                <td th:classappend="${r.passed} ? 'passed' : 'failed'"
+                    th:text="${r.passed} ? 'Yes' : 'No'"></td>
+                <td th:text="${r.message}"></td>
+            </tr>
+            </tbody>
+        </table>
+
+        <a class="btn btn-secondary" href="/ranrules">Back</a>
+
+        <!-- Modal for application data -->
+        <div class="modal fade"
+             th:id="${'appModal-' + application.id}"
+             tabindex="-1"
+             role="dialog">
+            <div class="modal-dialog" role="document">
+                <div class="modal-content">
+
+                    <div class="modal-header">
+                        <h5 class="modal-title"
+                            th:text="'Application Data (ID: ' + ${application.id} + ')'">
+                        </h5>
+                        <button type="button" class="btn-close" 
+                                data-bs-dismiss="modal" 
+                                aria-label="Close"></button>
+                    </div>
+
+                    <div class="modal-body">
+                        <p><strong>Final Decision:</strong>
+                            <span th:text="${application.finalDecision}"></span>
+                        </p>
+                        <h6>Submitted Fields</h6>
+                        <table class="table table-bordered">
+                            <thead>
+                            <tr><th>Field</th><th>Value</th></tr>
+                            </thead>
+                            <tbody>
+                            <tr th:each="entry : ${application.fieldValues}">
+                                <td th:text="${entry.key}"></td>
+                                <td th:text="${entry.value}"></td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button"
+                                class="btn btn-secondary"
+                                data-bs-dismiss="modal">
+                            Close
+                        </button>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+    </div> <!-- end if application != null -->
+
+</div>
+
+<!-- Bootstrap JS for modals -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+Explanation of the Fixes
+Display Application ID:
+
+In ranrulesDetails.html, we added:
+html
+Copy
+Edit
+<p><strong>Application ID:</strong>
+    <span th:text="${application.id}"></span>
+</p>
+This ensures the ID is rendered in the page.
+Stored Rule Results with ID/Description**:
+
+In the table:
+html
+Copy
+Edit
+<tr th:each="r : ${application.storedResults}">
+    <td>
+        <a th:href="@{|/ranrules/ruleInfo/${r.ruleId}|}"
+           th:text="${r.ruleId}"></a>
+    </td>
+    <td th:text="${r.ruleDescription}"></td>
+    ...
+</tr>
+The Rule ID becomes clickable, sending you to @{/ranrules/ruleInfo/{ruleId}}.
+View Application Data:
+
+The button opens a Bootstrap modal with ID: appModal-[application.id].
+The table in the modal loops over application.fieldValues to list each field and value.
+This ensures:
+
+The page at /ranrules/details/{id} shows:
+Application ID
+Final decision
+The number of rules run, pass/fail count
+A table of stored results (each with clickable rule ID)
+A modal to see the app’s submitted field data
+Any older or new applications that have 0 or more rules triggered will appear correctly.
 
 
-Ran Rules Page
-All Applications
-Application ID	Final Decision	Details
-2	Ran 0 rule(s), 0 passed, 0 failed	 view details
-
-
-here I am getting application id
-
-but when click on the view details
-http://localhost:8080/ranrules/details/2
-
-Rule Evaluation Results
-Application ID:
-
-Final Decision:
-
-Ran 1 rule(s), Passed 0, Failed 1
-view application data
-Stored Rule Results
-Rule ID	Description	Passed	Message
 
 
 
-1 rule ran which need to should show rule id and details which not showing and view application data is not showing
-and Application ID: is blank which need to show the ID which is Application ID)
+
+
