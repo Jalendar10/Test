@@ -1,154 +1,1212 @@
-package com.fiserv.diligenceServices;
+Project Structure
+css
+Copy
+Edit
+my-spring-boot-rules/
+├── pom.xml
+├── src
+│   └── main
+│       ├── java
+│       │   └── com
+│       │       └── example
+│       │           └── rulesapp
+│       │               ├── RulesAppApplication.java
+│       │               ├── DataInitializer.java
+│       │               ├── controller
+│       │               │   ├── HomeController.java
+│       │               │   ├── AIController.java         <-- Stub for AI rule generation
+│       │               │   ├── RulesConfigController.java
+│       │               │   ├── RanRulesController.java
+│       │               │   └── TestController.java
+│       │               ├── model
+│       │               │   ├── ApplicationData.java
+│       │               │   ├── FieldDefinition.java
+│       │               │   ├── RuleDefinition.java
+│       │               │   ├── RuleResult.java
+│       │               │   └── StoredRuleResult.java
+│       │               ├── repository
+│       │               │   ├── ApplicationDataRepository.java
+│       │               │   ├── FieldDefinitionRepository.java
+│       │               │   └── RuleDefinitionRepository.java
+│       │               └── service
+│       │                   ├── RulesEngineService.java
+│       │                   └── DataService.java
+│       └── resources
+│           ├── application.properties
+│           └── templates
+│               ├── home.html
+│               ├── createApplication.html
+│               ├── rulesConfig.html
+│               ├── editRule.html
+│               ├── ranrules.html
+│               ├── ranrulesDetails.html
+│               ├── ruleInfo.html
+│               ├── aiForm.html                <-- Minimal AI stub UI
+│               └── test.html
+└── ...
+1) pom.xml
+xml
+Copy
+Edit
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
+                             http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.security.InvalidKeyException;
-import java.security.NoSuchAlgorithmException;
-import java.util.Base64;
-import java.util.UUID;
+    <groupId>com.example</groupId>
+    <artifactId>my-spring-boot-rules</artifactId>
+    <version>1.0.0</version>
+    <name>my-spring-boot-rules</name>
 
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
+    <properties>
+        <java.version>1.8</java.version>
+        <spring.boot.version>2.6.14</spring.boot.version>
+    </properties>
 
-import org.json.JSONArray;
-import org.json.JSONObject;
+    <dependencies>
+        <!-- Spring Boot Starter Web -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+            <version>${spring.boot.version}</version>
+        </dependency>
 
-public class App {
+        <!-- Spring Boot Starter Thymeleaf -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-thymeleaf</artifactId>
+            <version>${spring.boot.version}</version>
+        </dependency>
+
+        <!-- Spring Boot Starter Data JPA -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+            <version>${spring.boot.version}</version>
+        </dependency>
+
+        <!-- H2 Database (in-memory) -->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- Lombok (optional) -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>1.18.24</version>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Spring Boot Maven Plugin -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <version>${spring.boot.version}</version>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>
+2) application.properties
+properties
+Copy
+Edit
+spring.datasource.url=jdbc:h2:mem:rulesdb;DB_CLOSE_ON_EXIT=FALSE
+spring.datasource.driverClassName=org.h2.Driver
+spring.jpa.hibernate.ddl-auto=update
+
+spring.h2.console.enabled=true
+spring.h2.console.path=/h2-console
+3) RulesAppApplication.java
+java
+Copy
+Edit
+package com.example.rulesapp;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class RulesAppApplication {
     public static void main(String[] args) {
-        System.out.println("Hello World!");
-        String API_KEY = "YGXZ0EJ82DYAHJeyZ5MAyxqIHplEADSroxnOSRu9FyG7jg4w";
-        String API_SECRET = "gwiwIZiSjQTHrYs8wMg2OHm1p6iZvwCBuH2x1xBFXcHAOdcFNYKVPcyn67h4O33P";
-        String BASE_URL = "https://connect-wan.fiservapis.com/ai-gateway/v1/chat/completions";
+        SpringApplication.run(RulesAppApplication.class, args);
+    }
+}
+4) DataInitializer.java
+java
+Copy
+Edit
+package com.example.rulesapp;
 
-        String apiKey = API_KEY;
-        String secret = API_SECRET;
-        String baseUrl = BASE_URL;
+import com.example.rulesapp.model.FieldDefinition;
+import com.example.rulesapp.service.DataService;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.stereotype.Component;
 
-        if (apiKey == null || secret == null || baseUrl == null) {
-            System.out.println("API Key, Secret, or Base URL is not set.");
-            System.exit(0);
-        }
+@Component
+public class DataInitializer implements CommandLineRunner {
 
-        String requestBody = getRequestBody();
-        long timestamp = System.currentTimeMillis();
-        String requestId = UUID.randomUUID().toString();
+    private final DataService dataService;
 
-        String hmacSignature = generateHmacSignature(requestBody, apiKey, secret, timestamp, requestId);
-        sendRequest(requestBody, hmacSignature, baseUrl, apiKey, timestamp, requestId);
+    public DataInitializer(DataService dataService) {
+        this.dataService = dataService;
     }
 
-    private static String getRequestBody() {
-        JSONArray messages = new JSONArray();
+    @Override
+    public void run(String... args) {
+        if (!dataService.getAllFields().isEmpty()) return;
 
-        // Construct the system prompt
-        JSONObject message1 = new JSONObject();
-        message1.put("content", "you generate a one word response based on user prompting");
-        message1.put("role", "system");
-        messages.put(message1);
+        // Insert 30 predefined fields...
+        dataService.createField(new FieldDefinition("name", "TEXT", "John Doe"));
+        dataService.createField(new FieldDefinition("age", "NUMBER", "25"));
+        dataService.createField(new FieldDefinition("sales", "NUMBER", "1000"));
+        dataService.createField(new FieldDefinition("volume", "NUMBER", "50"));
+        // ... continue with rest to 30 ...
+    }
+}
+(For brevity, not listing all 30 here again. Same as your existing code.)
 
-        // Construct the user input
-        JSONObject message2 = new JSONObject();
-        message2.put("content", "cartoon dog");
-        message2.put("role", "user");
-        messages.put(message2);
+5) Model Classes
+5.1) ApplicationData.java
+java
+Copy
+Edit
+package com.example.rulesapp.model;
 
-        JSONObject responseFormat = new JSONObject();
-        responseFormat.put("type", "text");
+import javax.persistence.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
-        JSONObject body = new JSONObject();
-        body.put ("model", "azure-openai-4o-east"); // or whatever your model is
-        body.put("messages", messages);
-        body.put("frequency_penalty", 0);
-        body.put("max_tokens", "40");
-        body.put("n", 1);
-        body.put("presence_penalty", 0);
-        body.put("response_format", responseFormat);
-        body.put("stream", false);
-        body.put("temperature", 1);
-        body.put("top_p", 1);
+/**
+ * Each submitted application with fieldValues, finalDecision, and stored results.
+ */
+@Entity
+public class ApplicationData {
 
-        String requestBody = body.toString();
-        System.out.println("request body: " + requestBody);
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
-        return requestBody;
+    @ElementCollection
+    private Map<String, String> fieldValues;
+
+    private String finalDecision;
+
+    @ElementCollection
+    private List<StoredRuleResult> storedResults = new ArrayList<>();
+
+    public ApplicationData() {}
+
+    public ApplicationData(Map<String, String> fieldValues) {
+        this.fieldValues = fieldValues;
     }
 
-    private static String generateHmacSignature(String requestBodyString, String apiKey, String secret, long timestamp, String requestId) {
-        String hmacSourceData = apiKey + requestId + timestamp + requestBodyString;
-
-        String algorithm = "HmacSHA256";
-        SecretKeySpec secretKeySpec = new SecretKeySpec(secret.getBytes(), algorithm);
-        Mac mac = null;
-
-        try {
-            mac = Mac.getInstance(algorithm);
-        } catch (NoSuchAlgorithmException nsae) {
-            System.out.println(nsae);
-            System.exit(0);
-        }
-
-        try {
-            mac.init(secretKeySpec);
-        } catch (InvalidKeyException ike) {
-            System.out.println(ike);
-            System.exit(0);
-        }
-
-        String hmacSignature = Base64.getEncoder().encodeToString(mac.doFinal(hmacSourceData.getBytes()));
-        return hmacSignature;
+    public Long getId() {
+        return id;
     }
 
-    private static void sendRequest(String requestBodyString, String hmacSignature, String baseUrl, String apiKey, long timestamp, String requestId) {
-        try {
-            URL url = new URL(baseUrl);
+    public Map<String, String> getFieldValues() {
+        return fieldValues;
+    }
 
-            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestMethod("POST");
+    public void setFieldValues(Map<String, String> fieldValues) {
+        this.fieldValues = fieldValues;
+    }
 
-            connection.setDoInput(true);
-            connection.setDoOutput(true);
+    public String getFinalDecision() {
+        return finalDecision;
+    }
 
-            connection.setRequestProperty("Content-Type", "application/json");
-            connection.setRequestProperty("Accept", "application/json");
-            connection.setRequestProperty("api-key", apiKey);
-            connection.setRequestProperty("Client-Request-Id", requestId);
-            connection.setRequestProperty("Timestamp", Long.toString(timestamp));
-            connection.setRequestProperty("Authorization", hmacSignature);
+    public void setFinalDecision(String finalDecision) {
+        this.finalDecision = finalDecision;
+    }
 
-            // Write the payload to the request body
-            try (OutputStream os = connection.getOutputStream()) {
-                byte[] input = requestBodyString.getBytes("utf-8");
-                os.write(input, 0, requestBodyString.length());
+    public List<StoredRuleResult> getStoredResults() {
+        return storedResults;
+    }
+
+    public void setStoredResults(List<StoredRuleResult> storedResults) {
+        this.storedResults = storedResults;
+    }
+}
+5.2) FieldDefinition.java
+java
+Copy
+Edit
+package com.example.rulesapp.model;
+
+import javax.persistence.*;
+
+@Entity
+public class FieldDefinition {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private String fieldName;
+    private String fieldType;
+    private String defaultValue;
+
+    public FieldDefinition() {}
+
+    public FieldDefinition(String fieldName, String fieldType, String defaultValue) {
+        this.fieldName = fieldName;
+        this.fieldType = fieldType;
+        this.defaultValue = defaultValue;
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public String getFieldName() {
+        return fieldName;
+    }
+
+    public void setFieldName(String fieldName) {
+        this.fieldName = fieldName;
+    }
+
+    public String getFieldType() {
+        return fieldType;
+    }
+
+    public void setFieldType(String fieldType) {
+        this.fieldType = fieldType;
+    }
+
+    public String getDefaultValue() {
+        return defaultValue;
+    }
+
+    public void setDefaultValue(String defaultValue) {
+        this.defaultValue = defaultValue;
+    }
+}
+5.3) RuleDefinition.java
+Added boolean active to toggle whether the rule is run or skipped.
+expression can be a multi-condition string.
+
+java
+Copy
+Edit
+package com.example.rulesapp.model;
+
+import javax.persistence.*;
+
+@Entity
+public class RuleDefinition {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    /**
+     * e.g. "age>18 AND sales>100 OR NOT(volume>30)".
+     * One text box, can contain multiple conditions.
+     */
+    @Lob
+    private String expression;
+
+    private String description;
+
+    /**
+     * If false, we skip this rule in evaluation.
+     */
+    private boolean active = true;
+
+    public RuleDefinition() {}
+
+    public RuleDefinition(String expression, String description) {
+        this.expression = expression;
+        this.description = description;
+        this.active = true;
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public String getExpression() {
+        return expression;
+    }
+
+    public void setExpression(String expression) {
+        this.expression = expression;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
+    public boolean isActive() {
+        return active;
+    }
+
+    public void setActive(boolean active) {
+        this.active = active;
+    }
+}
+5.4) RuleResult.java (transient)
+java
+Copy
+Edit
+package com.example.rulesapp.model;
+
+/**
+ * Temporary in-memory result of evaluating a rule.
+ */
+public class RuleResult {
+
+    private Long ruleId;
+    private String ruleDescription;
+    private boolean passed;
+    private String message;
+
+    public RuleResult(Long ruleId, String ruleDescription, boolean passed, String message) {
+        this.ruleId = ruleId;
+        this.ruleDescription = ruleDescription;
+        this.passed = passed;
+        this.message = message;
+    }
+
+    public Long getRuleId() {
+        return ruleId;
+    }
+
+    public String getRuleDescription() {
+        return ruleDescription;
+    }
+
+    public boolean isPassed() {
+        return passed;
+    }
+
+    public String getMessage() {
+        return message;
+    }
+}
+5.5) StoredRuleResult.java (persisted)
+java
+Copy
+Edit
+package com.example.rulesapp.model;
+
+import javax.persistence.Embeddable;
+import java.io.Serializable;
+
+/**
+ * A persistent version of RuleResult to store in ApplicationData.
+ */
+@Embeddable
+public class StoredRuleResult implements Serializable {
+
+    private Long ruleId;
+    private String ruleDescription;
+    private boolean passed;
+    private String message;
+
+    public StoredRuleResult() {}
+
+    public StoredRuleResult(Long ruleId, String ruleDescription, boolean passed, String message) {
+        this.ruleId = ruleId;
+        this.ruleDescription = ruleDescription;
+        this.passed = passed;
+        this.message = message;
+    }
+
+    public Long getRuleId() {
+        return ruleId;
+    }
+
+    public void setRuleId(Long ruleId) {
+        this.ruleId = ruleId;
+    }
+
+    public String getRuleDescription() {
+        return ruleDescription;
+    }
+
+    public void setRuleDescription(String ruleDescription) {
+        this.ruleDescription = ruleDescription;
+    }
+
+    public boolean isPassed() {
+        return passed;
+    }
+
+    public void setPassed(boolean passed) {
+        this.passed = passed;
+    }
+
+    public String getMessage() {
+        return message;
+    }
+
+    public void setMessage(String message) {
+        this.message = message;
+    }
+}
+6) Repository Interfaces
+6.1) ApplicationDataRepository.java
+java
+Copy
+Edit
+package com.example.rulesapp.repository;
+
+import com.example.rulesapp.model.ApplicationData;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface ApplicationDataRepository extends JpaRepository<ApplicationData, Long> {
+}
+6.2) FieldDefinitionRepository.java
+java
+Copy
+Edit
+package com.example.rulesapp.repository;
+
+import com.example.rulesapp.model.FieldDefinition;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface FieldDefinitionRepository extends JpaRepository<FieldDefinition, Long> {
+}
+6.3) RuleDefinitionRepository.java
+java
+Copy
+Edit
+package com.example.rulesapp.repository;
+
+import com.example.rulesapp.model.RuleDefinition;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface RuleDefinitionRepository extends JpaRepository<RuleDefinition, Long> {
+}
+7) Service Classes
+7.1) DataService.java
+java
+Copy
+Edit
+package com.example.rulesapp.service;
+
+import com.example.rulesapp.model.*;
+import com.example.rulesapp.repository.ApplicationDataRepository;
+import com.example.rulesapp.repository.FieldDefinitionRepository;
+import com.example.rulesapp.repository.RuleDefinitionRepository;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Service
+public class DataService {
+
+    private final FieldDefinitionRepository fieldRepo;
+    private final RuleDefinitionRepository ruleRepo;
+    private final ApplicationDataRepository appRepo;
+
+    public DataService(FieldDefinitionRepository fieldRepo,
+                       RuleDefinitionRepository ruleRepo,
+                       ApplicationDataRepository appRepo) {
+        this.fieldRepo = fieldRepo;
+        this.ruleRepo = ruleRepo;
+        this.appRepo = appRepo;
+    }
+
+    // Fields
+    public List<FieldDefinition> getAllFields() {
+        return fieldRepo.findAll();
+    }
+    public FieldDefinition createField(FieldDefinition fieldDefinition) {
+        return fieldRepo.save(fieldDefinition);
+    }
+
+    // Rules
+    public List<RuleDefinition> getAllRules() {
+        return ruleRepo.findAll();
+    }
+    public RuleDefinition createRule(RuleDefinition ruleDefinition) {
+        return ruleRepo.save(ruleDefinition);
+    }
+    public RuleDefinition getRuleById(Long id) {
+        return ruleRepo.findById(id).orElse(null);
+    }
+    public RuleDefinition saveRule(RuleDefinition rule) {
+        return ruleRepo.save(rule);
+    }
+
+    // Applications
+    public ApplicationData saveApplicationData(ApplicationData applicationData) {
+        return appRepo.save(applicationData);
+    }
+    public List<ApplicationData> getAllApplications() {
+        return appRepo.findAll();
+    }
+    public ApplicationData getApplicationById(Long id) {
+        return appRepo.findById(id).orElse(null);
+    }
+}
+7.2) RulesEngineService.java
+A naive multi-condition parser that tries to handle AND, OR, NOT, plus <, >, <=, >=, ==, /, %, etc. In a real system you’d use a real parser or rule-engine library. This is a quick demonstration.
+
+java
+Copy
+Edit
+package com.example.rulesapp.service;
+
+import com.example.rulesapp.model.ApplicationData;
+import com.example.rulesapp.model.RuleDefinition;
+import com.example.rulesapp.model.RuleResult;
+import org.springframework.stereotype.Service;
+
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+@Service
+public class RulesEngineService {
+
+    /**
+     * Evaluate each active rule's expression on the application fields.
+     */
+    public List<RuleResult> evaluateRules(ApplicationData applicationData, List<RuleDefinition> allRules) {
+        Map<String, String> fieldValues = applicationData.getFieldValues();
+        List<RuleResult> results = new ArrayList<>();
+
+        for (RuleDefinition rule : allRules) {
+            if (!rule.isActive()) {
+                // If rule is off/toggle off, skip it entirely.
+                continue;
             }
+            // Evaluate the multi-condition expression
+            boolean passed = evaluateMultiCondition(rule.getExpression(), fieldValues);
+            String message = passed ? "Rule Passed" : "Rule Failed";
 
-            int responseCode = connection.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
+            results.add(new RuleResult(rule.getId(), rule.getDescription(), passed, message));
+        }
+        return results;
+    }
 
-            // Read the response body
-            try (BufferedReader br = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
-                String line;
-                StringBuilder sb = new StringBuilder();
-                while ((line = br.readLine()) != null) {
-                    sb.append(line).append('\n');
-                }
-                System.out.println("Response Body: " + sb.toString());
-               
-                // Parse the JSON response and extract message.content
-                JSONObject jsonResponse = new JSONObject(sb.toString());
-                JSONArray choices = jsonResponse.getJSONArray("choices");
-                JSONObject message = choices.getJSONObject(0).getJSONObject("message");
-                String content = message.getString("content");
-                System.out.println("Response Content: " + content);
+    /**
+     * Naive approach for expressions like:
+     * "age>18 AND sales>100 OR NOT(volume>30)"
+     *
+     * We'll tokenize on "AND", "OR", "NOT" and attempt to parse each sub-condition.
+     * For real usage, integrate a real parser (SpEL, MVEL, JEXL, etc.).
+     */
+    private boolean evaluateMultiCondition(String expression, Map<String, String> fields) {
+        if (expression == null || expression.trim().isEmpty()) {
+            return false;
+        }
+
+        // Replace all uppercase logical operators for easier splitting
+        String expr = expression.replaceAll("(?i)AND", " AND ")
+                                .replaceAll("(?i)OR", " OR ")
+                                .replaceAll("(?i)NOT", " NOT ");
+
+        // We'll do a basic pass: handle NOT first, then AND, then OR.
+        // This is still naive (no parentheses handling, etc.).
+
+        // Step 1: tokenize by OR
+        // e.g. "cond1 AND cond2" OR "NOT cond3"
+        String[] orBlocks = expr.split("(?i)\\sOR\\s");
+        boolean orResult = false;
+        for (String orBlock : orBlocks) {
+            // Evaluate the "OR block"
+            if (evaluateAndBlock(orBlock.trim(), fields)) {
+                orResult = true; // if any OR-block is true => entire expression is true
+                break;
             }
+        }
+        return orResult;
+    }
 
-            connection.disconnect();
+    /**
+     * Evaluate something that may contain "AND" or "NOT".
+     */
+    private boolean evaluateAndBlock(String block, Map<String, String> fields) {
+        // We'll split by " AND "
+        String[] andParts = block.split("(?i)\\sAND\\s");
+        boolean andResult = true;
+        for (String part : andParts) {
+            // handle NOT
+            part = part.trim();
+            boolean neg = false;
+            if (part.toUpperCase().startsWith("NOT")) {
+                neg = true;
+                part = part.substring(3).trim(); // remove 'NOT'
+            }
+            // Evaluate single condition
+            boolean condRes = evaluateSingleCondition(part, fields);
+            if (neg) condRes = !condRes;
+            andResult = andResult && condRes;
+        }
+        return andResult;
+    }
 
-        } catch (IOException e) {
-            e.printStackTrace();
+    /**
+     * Evaluate a single condition like "age>18" or "volume<=30".
+     * We'll handle <, >, <=, >=, ==, /, % also in naive ways.
+     */
+    private boolean evaluateSingleCondition(String condition, Map<String, String> fields) {
+        // Basic approach: find an operator among <, <=, >, >=, ==, /, %
+        // This is simplistic. Real parser recommended.
+
+        // Patterns for something like "(\w+)(operator)(\w+)"
+        // We'll attempt a quick find:
+        Pattern p = Pattern.compile("(.+?)(<=|>=|==|<|>|/|%)(.+)");
+        Matcher m = p.matcher(condition.trim());
+        if (!m.matches()) {
+            return false;
+        }
+
+        String left = m.group(1).trim();  // e.g. "age"
+        String op   = m.group(2).trim();  // e.g. ">"
+        String right= m.group(3).trim();  // e.g. "18"
+
+        // If left is a field, get its value
+        String leftValStr = fields.get(left);
+        if (leftValStr == null) {
+            // Maybe left is actually a numeric literal, but let's assume it's a field that doesn't exist
+            return false;
+        }
+
+        // Attempt numeric parse
+        try {
+            double leftVal = Double.parseDouble(leftValStr);
+            double rightVal = Double.parseDouble(right);
+
+            switch (op) {
+                case ">":  return leftVal > rightVal;
+                case ">=": return leftVal >= rightVal;
+                case "<":  return leftVal < rightVal;
+                case "<=": return leftVal <= rightVal;
+                case "==": return leftVal == rightVal;
+                case "/":  // naive: check if leftVal is divisible by rightVal
+                    return (leftVal % rightVal == 0);
+                case "%":  // naive: leftVal mod rightVal? 
+                    // let's interpret condition "age%2" means age mod 2==0?
+                    // This is ambiguous, just a demonstration:
+                    return (leftVal % rightVal == 0);
+                default: return false;
+            }
+        } catch (NumberFormatException e) {
+            return false;
         }
     }
 }
+Note: This parsing is extremely naive. It only supports a small subset of logical combos with “AND”, “OR”, “NOT” (no parentheses, no deeper precedence beyond “NOT first, AND second, OR last”). Use a real rule engine or expression library if you need robust logic.
+
+8) Controller Classes
+8.1) AIController.java (New)
+Simulates an “AI” feature.
+
+GET /ai/form to show a page where the user can enter some instructions.
+POST /ai/generate to “generate” a rule expression from “AI.” In real usage, you’d call an actual AI model.
+java
+Copy
+Edit
+package com.example.rulesapp.controller;
+
+import com.example.rulesapp.model.RuleDefinition;
+import com.example.rulesapp.service.DataService;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.*;
+
+@Controller
+@RequestMapping("/ai")
+public class AIController {
+
+    private final DataService dataService;
+
+    public AIController(DataService dataService) {
+        this.dataService = dataService;
+    }
+
+    /**
+     * Show a form where user can put "userContent" (like "I want a rule to check if age>18 and sales>100").
+     * We'll pretend to pass "systemContent" with application fields.
+     */
+    @GetMapping("/form")
+    public String showAIForm() {
+        return "aiForm";
+    }
+
+    /**
+     * Pretend to use AI. We'll just parse userContent naively and set expression.
+     */
+    @PostMapping("/generate")
+    public String generateRule(@RequestParam String userContent, 
+                               @RequestParam(required = false) String description) {
+        // In real usage: call an AI model with "systemContent" about fields, "userContent" from user...
+        // For now, let's just do a naive approach:
+        // If user typed "Check adult and good sales", we'll produce "age>18 AND sales>100"
+        String expression = "age>18 AND sales>100"; // Hard-coded demo
+
+        // Save it as a new rule
+        RuleDefinition rule = new RuleDefinition(expression, description);
+        dataService.createRule(rule);
+
+        return "redirect:/rulesConfig";
+    }
+}
+8.2) HomeController.java
+We add an “AI” button that links to /ai/form. The rest is the same as before.
+
+java
+Copy
+Edit
+package com.example.rulesapp.controller;
+
+import com.example.rulesapp.model.*;
+import com.example.rulesapp.service.DataService;
+import com.example.rulesapp.service.RulesEngineService;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.*;
+
+@Controller
+public class HomeController {
+
+    private final DataService dataService;
+    private final RulesEngineService rulesEngineService;
+
+    public HomeController(DataService dataService, RulesEngineService rulesEngineService) {
+        this.dataService = dataService;
+        this.rulesEngineService = rulesEngineService;
+    }
+
+    @GetMapping({"/", "/home"})
+    public String home(Model model) {
+        model.addAttribute("applications", dataService.getAllApplications());
+        return "home";
+    }
+
+    @GetMapping("/createApplication")
+    public String showCreateApplicationForm(Model model) {
+        List<FieldDefinition> fields = dataService.getAllFields();
+        model.addAttribute("fields", fields);
+
+        Map<String, String> fieldMap = new HashMap<>();
+        for (FieldDefinition fd : fields) {
+            fieldMap.put(fd.getFieldName(), fd.getDefaultValue() == null ? "" : fd.getDefaultValue());
+        }
+        model.addAttribute("fieldMap", fieldMap);
+
+        return "createApplication";
+    }
+
+    @PostMapping("/submitApplication")
+    public String submitApplication(@RequestParam("fieldNames") String[] fieldNames,
+                                    @RequestParam("fieldValues") String[] fieldValues) {
+        // Build map
+        Map<String, String> fvMap = new HashMap<>();
+        for (int i = 0; i < fieldNames.length; i++) {
+            fvMap.put(fieldNames[i], fieldValues[i]);
+        }
+
+        // Create the application
+        ApplicationData appData = new ApplicationData(fvMap);
+        appData = dataService.saveApplicationData(appData);
+
+        // Evaluate rules
+        List<RuleDefinition> rules = dataService.getAllRules();
+        List<RuleResult> results = rulesEngineService.evaluateRules(appData, rules);
+
+        // Convert to stored
+        List<StoredRuleResult> storedList = new ArrayList<>();
+        for (RuleResult rr : results) {
+            storedList.add(new StoredRuleResult(rr.getRuleId(), rr.getRuleDescription(),
+                                                rr.isPassed(), rr.getMessage()));
+        }
+        int total = storedList.size();
+        int passed = (int) storedList.stream().filter(StoredRuleResult::isPassed).count();
+        int failed = total - passed;
+
+        appData.setFinalDecision(String.format("Ran %d rule(s), %d passed, %d failed", total, passed, failed));
+        appData.setStoredResults(storedList);
+
+        dataService.saveApplicationData(appData);
+
+        return "redirect:/home";
+    }
+}
+8.3) RulesConfigController.java
+We add a toggle button for active in the rule config.
+
+java
+Copy
+Edit
+package com.example.rulesapp.controller;
+
+import com.example.rulesapp.model.FieldDefinition;
+import com.example.rulesapp.model.RuleDefinition;
+import com.example.rulesapp.service.DataService;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.*;
+
+@Controller
+@RequestMapping("/rulesConfig")
+public class RulesConfigController {
+
+    private final DataService dataService;
+
+    public RulesConfigController(DataService dataService) {
+        this.dataService = dataService;
+    }
+
+    @GetMapping
+    public String showConfigPage(Model model) {
+        model.addAttribute("fields", dataService.getAllFields());
+        model.addAttribute("rules", dataService.getAllRules());
+        return "rulesConfig";
+    }
+
+    @PostMapping("/addField")
+    public String addField(@RequestParam String fieldName,
+                           @RequestParam String fieldType,
+                           @RequestParam(required = false) String defaultValue) {
+        if (defaultValue == null) defaultValue = "";
+        FieldDefinition fd = new FieldDefinition(fieldName, fieldType, defaultValue);
+        dataService.createField(fd);
+        return "redirect:/rulesConfig";
+    }
+
+    /**
+     * Single text box for complex expressions.
+     * Example: "age>18 AND sales>100 OR NOT(volume>30)"
+     */
+    @PostMapping("/addRule")
+    public String addRule(@RequestParam String expression,
+                          @RequestParam String description,
+                          @RequestParam(required = false, defaultValue = "true") boolean active) {
+        RuleDefinition rd = new RuleDefinition(expression, description);
+        rd.setActive(active);
+        dataService.createRule(rd);
+        return "redirect:/rulesConfig";
+    }
+
+    @GetMapping("/editRule/{id}")
+    public String editRuleForm(@PathVariable Long id, Model model) {
+        RuleDefinition rule = dataService.getRuleById(id);
+        model.addAttribute("rule", rule);
+        return "editRule";
+    }
+
+    @PostMapping("/updateRule")
+    public String updateRule(@RequestParam Long id,
+                             @RequestParam String expression,
+                             @RequestParam String description,
+                             @RequestParam(required = false, defaultValue = "false") boolean active) {
+        RuleDefinition rule = dataService.getRuleById(id);
+        if (rule != null) {
+            rule.setExpression(expression);
+            rule.setDescription(description);
+            rule.setActive(active);
+            dataService.saveRule(rule);
+        }
+        return "redirect:/rulesConfig";
+    }
+}
+8.4) RanRulesController.java
+We skip re-running the rules; we just load the stored results.
+We also handle showing a rule info page if you click a rule ID.
+
+java
+Copy
+Edit
+package com.example.rulesapp.controller;
+
+import com.example.rulesapp.model.ApplicationData;
+import com.example.rulesapp.model.RuleDefinition;
+import com.example.rulesapp.service.DataService;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.*;
+
+@Controller
+@RequestMapping("/ranrules")
+public class RanRulesController {
+
+    private final DataService dataService;
+
+    public RanRulesController(DataService dataService) {
+        this.dataService = dataService;
+    }
+
+    @GetMapping
+    public String viewRanRules(Model model) {
+        model.addAttribute("applications", dataService.getAllApplications());
+        return "ranrules";
+    }
+
+    @GetMapping("/details/{appId}")
+    public String viewRuleDetails(@PathVariable Long appId, Model model) {
+        ApplicationData application = dataService.getApplicationById(appId);
+        if (application == null) {
+            model.addAttribute("error", "Application not found.");
+            return "ranrules";
+        }
+        model.addAttribute("application", application);
+
+        int totalRules = application.getStoredResults().size();
+        int passedCount = (int) application.getStoredResults().stream().filter(r -> r.isPassed()).count();
+        int failedCount = totalRules - passedCount;
+
+        model.addAttribute("totalRules", totalRules);
+        model.addAttribute("passedCount", passedCount);
+        model.addAttribute("failedCount", failedCount);
+
+        return "ranrulesDetails";
+    }
+
+    @GetMapping("/ruleInfo/{ruleId}")
+    public String ruleInfo(@PathVariable Long ruleId, Model model) {
+        RuleDefinition rule = dataService.getRuleById(ruleId);
+        model.addAttribute("rule", rule);
+        return "ruleInfo";
+    }
+}
+8.5) TestController.java
+java
+Copy
+Edit
+package com.example.rulesapp.controller;
+
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+public class TestController {
+    @GetMapping("/test")
+    public String test() {
+        return "Test endpoint is working!";
+    }
+}
+9) Thymeleaf Templates
+9.1) home.html
+Adds an AI button linking to /ai/form.
+
+html
+Copy
+Edit
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Home - Rules App</title>
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">
+    <style>
+        body { margin: 20px; }
+        .app-item { margin-bottom: 8px; }
+        .decision { font-style: italic; color: #555; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <nav class="mb-3">
+        <a class="btn btn-info" href="/home">Home</a>
+        <a class="btn btn-secondary" href="/rulesConfig">Manage Fields/Rules</a>
+        <a class="btn btn-info" href="/ranrules">Check Run Rules</a>
+        <a class="btn btn-outline-success" href="/test">Test Endpoint</a>
+        <!-- New AI button -->
+        <a class="btn btn-warning" href="/ai/form">Use AI</a>
+    </nav>
+
+    <h1>Rules App - Home</h1>
+    <hr/>
+
+    <div class="mb-3">
+        <a class="btn btn-primary" href="/createApplication">Create New Application</a>
+    </div>
+
+    <h2>Existing Applications</h2>
+    <div>
+        <div th:each="app : ${applications}" class="app-item">
+            <strong>
+                <a href="#"
+                   th:text="'ID: ' + ${app.id}"
+                   th:attr="data-bs-toggle=modal, data-bs-target=${'#appModal-' + app.id}">
+                </a>
+            </strong>
+            <span class="decision" th:text="${app.finalDecision}"></span>
+        </div>
+        <div th:if="${applications.size() == 0}">
+            No applications found.
+        </div>
+    </div>
+
+    <!-- Modal for each application -->
+    <div th:each="app : ${applications}">
+        <div class="modal fade"
+             th:id="${'appModal-' + app.id}"
+             tabindex="-1"
+             role="dialog">
+            <div class="modal-dialog" role="document">
+                <div class="modal-content">
+
+                    <div class="modal-header">
+                        <h5 class="modal-title"
+                            th:text="'Application Data (ID: ' + ${app.id} + ')'">
+                        </h5>
+                        <button type="button" class="btn-close" 
+                                data-bs-dismiss="modal" 
+                                aria-label="Close"></button>
+                    </div>
+
+                    <div class="modal-body">
+                        <p><strong>Final Decision:</strong>
+                            <span th:text="${app.finalDecision}"></span>
+                        </p>
+                        <h6>Submitted Fields</h6>
+                        <table class="table table-bordered">
+                            <thead>
+                            <tr><th>Field</th><th>Value</th></tr>
+                            </thead>
+                            <tbody>
+                            <tr th:each="entry : ${app.fieldValues}">
+                                <td th:text="${entry.key}"></td>
+                                <td th:text="${entry.value}"></td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" 
+                                data-bs-dismiss="modal">Close</button>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+9.2) aiForm.html (new)
+A minimal stub for an AI input form.
+
+html
+Copy
+Edit
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>AI Rule Generator</title>
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">
+</head>
+<body>
+<div class="container">
+    <nav class="mb-3">
+        <a class="btn btn-info" href="/home">Home</a>
+        <a class="btn btn-info" href="/rulesConfig">Manage Fields/Rules</a>
+    </nav>
+
+    <h1>AI Rule Generator</h1>
+    <hr/>
+
+    <p>Enter your instructions for the AI. This is just a placeholder demo.</p>
+    <form action="/ai/generate" method="post">
+        <div class="mb-3">
+            <label>Your instructions (userContent):</label>
+            <textarea class="form-control" name="userContent" rows="3"></textarea>
+        </div>
+        <div class="mb-3">
+            <label>Rule Description (optional):</label>
+            <input class="form-control" type="text" name="description" />
+        </div>
+        <button class="btn btn-primary" type="submit">Generate Rule</button>
+    </form>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+9.3) createApplication.html, rulesConfig.html, editRule.html, ranrules.html, ranrulesDetails.html, ruleInfo.html, test.html
+Same as your prior code, but we’ve updated:
+
+rulesConfig.html to have a single text box for the expression and an Active toggle (a checkbox).
+editRule.html also has an Active toggle.
+rulesConfig.html – Key snippet
+html
+Copy
+Edit
+<h3>Add Rule</h3>
+<form action="/rulesConfig/addRule" method="post" class="row g-3">
+    <div class="col-md-6">
+        <label>Expression (e.g. age>18 AND sales>100)</label>
+        <textarea class="form-control" name="expression" rows="3"></textarea>
+    </div>
+    <div class="col-md-4">
+        <label>Description</label>
+        <input class="form-control" type="text" name="description" />
+    </div>
+    <div class="col-md-2">
+        <label>Active?</label>
+        <input class="form-check-input" type="checkbox" name="active" checked/>
+    </div>
+    <div class="col-md-12 align-self-end">
+        <button class="btn btn-primary" type="submit">Add Rule</button>
+    </div>
+</form>
+editRule.html – Key snippet
+html
+Copy
+Edit
+<!-- Add a checkbox to toggle active -->
+<div class="mb-3 form-check">
+    <input class="form-check-input" type="checkbox" name="active"
+           th:checked="${rule.active}" id="activeCheck"/>
+    <label class="form-check-label" for="activeCheck">Active?</label>
+</div>
+You already have ranrulesDetails.html and ruleInfo.html from the previous code, which show the application ID, final decisions, stored rule results, etc. If you keep them unchanged except for the advanced expression changes, you’re set.
+
+How to Run
+Build:
+bash
+Copy
+Edit
+mvn clean install
+Start:
+bash
+Copy
+Edit
+mvn spring-boot:run
+Visit:
+/home → AI button, create applications
+/ai/form → Stub for user instructions
+/rulesConfig → Single text box for multi-condition expressions, plus an “Active?” checkbox
+/ranrules → List of apps, each “View Details” shows stored results
+Each stored result’s “Rule ID” is clickable → “ruleInfo” page to see that rule’s actual expression
+This satisfies your requests:
+
+One text box for advanced multi-condition expressions with operators.
+Active toggle for each rule (if off, we skip it).
+AI button on home to “generate” a rule from user instructions.
+The rest of the app’s logic (application submission, final decisions, etc.) remains the same.
+Enjoy!
+
+
+
+
+
+
+
