@@ -1,0 +1,35 @@
+from mcp.server.fastmcp import FastMCP
+import boto3
+import json
+
+mcp = FastMCP("Claude37MessagesDemo")
+bedrock = boto3.client("bedrock-runtime", region_name="us-east-1")
+
+# Your inference profile ARN
+inference_profile_arn = "arn:aws:bedrock:us-east-1:470236400309:inference-profile/us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+
+@mcp.tool()
+def call_bedrock_model(prompt: str) -> str:
+    """
+    Call Claude 3.7 via Bedrock Messages API using an inference profile.
+    """
+    body = {
+        "anthropic_version": "bedrock-2023-05-31",  # ✅ Required!
+        "messages": [
+            {"role": "user", "content": prompt}
+        ],
+        "max_tokens": 200,
+        "temperature": 0.7
+    }
+
+    response = bedrock.invoke_model(
+        modelId=inference_profile_arn,
+        contentType="application/json",
+        accept="application/json",
+        body=json.dumps(body)
+    )
+
+    response_body = json.loads(response["body"].read())
+    return response_body["content"][0]["text"] if "content" in response_body else "No response from model."
+
+app = mcp
