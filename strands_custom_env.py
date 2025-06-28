@@ -26,7 +26,7 @@ import logging
 import os
 import time
 import uuid
-from typing import Any, Generator, Iterable, Type, TypeVar, Union, cast
+from typing import Any, Generator, Iterable, Type, TypeVar, Union, cast, TypedDict
 
 import requests
 from dotenv import load_dotenv
@@ -46,7 +46,15 @@ class CustomModelFI(SAOpenAIModel):
     # ------------------------------------------------------------------ static
     REQUIRED_ENV = ("API_KEY", "API_SECRET", "BASE_URL")
 
-    class CustomConfig(SAOpenAIModel.OpenAIConfig, total=False):
+    class CustomConfig(TypedDict, total=False):
+        """Model configuration accepted by CustomModelFI.
+
+        Mirrors the keys used by the OpenAI provider so existing YAML
+        or Python configs continue to work.
+        """
+
+        model_id: str
+        params: dict[str, Any] | None
         """No extra keys; inherits ``model_id`` & ``params`` semantics."""
 
     # ------------------------------------------------------------------ init
@@ -174,30 +182,3 @@ class CustomModelFI(SAOpenAIModel):
     ) -> Generator[dict[str, Union[T, Any]], None, None]:
         data = self.complete(prompt)
         yield {"output": output_model.model_validate_json(data)}
-
-
-test.py
-from strands.model import create_model
-from strands.types.content import Messages
-
-def test_agent():
-    model = create_model(
-        provider="custom_model_FI",                 # ✅ must match entry-point
-        model_id="azure-openai-4o-mini-east",       # ✅ matches your backend model ID
-        params={
-            "temperature": 0.7,
-            "max_tokens": 500
-        }
-    )
-
-    messages: Messages = [
-        {"role": "system", "content": "You are a helpful assistant."},
-        {"role": "user", "content": "Explain how photosynthesis works in simple terms."}
-    ]
-
-    print("Sending request to custom_model_FI...\n")
-    result = model.complete(messages)
-    print("Response from model:\n", result)
-
-if __name__ == "__main__":
-    test_agent()
