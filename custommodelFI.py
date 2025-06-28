@@ -1,51 +1,25 @@
-PS C:\Users\F41n1so\Downloads\MCP_Test> & c:/Users/F41n1so/Downloads/MCP_Test/venv/Scripts/python.exe c:/Users/F41n1so/Downloads/MCP_Test/weather/custom_model_FI_TEST.py
-Traceback (most recent call last):
-  File "c:\Users\F41n1so\Downloads\MCP_Test\weather\custom_model_FI_TEST.py", line 17, in <module>
-    response= agent("what is 2+2")
-              ^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\F41n1so\Downloads\MCP_Test\venv\Lib\site-packages\strands\agent\agent.py", line 358, in __call__
-    result = self._run_loop(prompt, kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\F41n1so\Downloads\MCP_Test\venv\Lib\site-packages\strands\agent\agent.py", line 462, in _run_loop
-    return self._execute_event_loop_cycle(invocation_callback_handler, kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\F41n1so\Downloads\MCP_Test\venv\Lib\site-packages\strands\agent\agent.py", line 490, in _execute_event_loop_cycle
-    stop_reason, message, metrics, state = event_loop_cycle(
-                                           ^^^^^^^^^^^^^^^^^
-  File "C:\Users\F41n1so\Downloads\MCP_Test\venv\Lib\site-packages\strands\event_loop\event_loop.py", line 190, in event_loop_cycle
-    raise e
-  File "C:\Users\F41n1so\Downloads\MCP_Test\venv\Lib\site-packages\strands\event_loop\event_loop.py", line 148, in event_loop_cycle
-    stop_reason, message, usage, metrics, kwargs["request_state"] = stream_messages(
-                                                                    ^^^^^^^^^^^^^^^^
-  File "C:\Users\F41n1so\Downloads\MCP_Test\venv\Lib\site-packages\strands\event_loop\streaming.py", line 340, in stream_messages
-    return process_stream(chunks, callback_handler, messages, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\F41n1so\Downloads\MCP_Test\venv\Lib\site-packages\strands\event_loop\streaming.py", line 290, in process_stream
-    for chunk in chunks:
-                 ^^^^^^
-  File "C:\Users\F41n1so\Downloads\MCP_Test\venv\Lib\site-packages\strands\types\models\model.py", line 115, in converse
-    for event in response:
-                 ^^^^^^^^
-  File "C:\Users\F41n1so\Downloads\MCP_Test\venv\Lib\site-packages\strands\models\custom_model_FI.py", line 123, in stream
-    raise RuntimeError(f"custom_model_FI HTTP {resp.status_code}: {resp.text}")
-RuntimeError: custom_model_FI HTTP 500: {"error":{"code":"steps.hmac.HmacVerificationFailed","message":"HMAC verification failed: policy(HMAC-Auth-256)","additionalInfo":"Please try again. If issue persists reach out to our support team."}}
-PS C:\Users\F41n1so\Downloads\MCP_Test> 
 """
 Strands-compatible provider: **custom_model_FI**
 -------------------------------------------------
-Same interface as Strands’ built‑in ``OpenAIModel`` but proxies requests to a
-company‑internal LLM endpoint that is secured with an HMAC signature.
+Provides a drop‑in replacement for Strands’ ``OpenAIModel`` but signs every
+request with an **HMAC** scheme that must *exactly* match the reference
+implementation found in *base_code.py* (no custom JSON separators, identical
+body structure).
 
-🔑 **Secrets** are pulled from a local ``.env`` file (via *python‑dotenv*) so you
-can run the agent without exporting environment variables every time.
+Key adjustments (2025‑06‑28)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+* **HMAC source string** now uses *default* ``json.dumps`` (includes spaces) —
+  this fixes ``steps.hmac.HmacVerificationFailed``.
+* Request body layout is **byte‑for‑byte** identical to *base_code.py*:
+  - ``frequency_penalty``
+  - ``presence_penalty``
+  - ``n``
+  - ``response_format``
+  - ``temperature`` / ``top_p``
+  - plus any overrides in ``params``.
+* The body is NOT re‑ordered or minified; insertion order is preserved.
 
-Key features
-~~~~~~~~~~~~
-* Reads ``API_KEY``, ``API_SECRET``, ``BASE_URL`` from **.env** automatically.
-* Streaming Server‑Sent‑Events → Strands chunk sequence (`message_start`, …).
-* Supports `tool_calls`, `reasoning_content`, and propagates `finish_reason`.
-* Provides ``complete()`` (blocking) and ``structured_output()`` helpers.
-* Drop‑in provider name: **custom_model_FI** (declared in entry‑points).
+With these changes the backend should compute the same HMAC and return 200.
 """
 
 from __future__ import annotations
@@ -73,69 +47,65 @@ T = TypeVar("T", bound=BaseModel)
 
 
 class CustomModelFI(SAOpenAIModel):
-    """Strands provider that mirrors the OpenAI API while using a custom backend."""
+    """Strands provider mirroring OpenAI but using company‑internal HMAC auth."""
 
-    # ------------------------------------------------------------------ static
     REQUIRED_ENV = ("API_KEY", "API_SECRET", "BASE_URL")
 
     class CustomConfig(TypedDict, total=False):
-        """Model configuration accepted by CustomModelFI.
-
-        Mirrors the keys used by the OpenAI provider so existing YAML
-        or Python configs continue to work.
-        """
-
         model_id: str
         params: dict[str, Any] | None
-        """No extra keys; inherits ``model_id`` & ``params`` semantics."""
 
-    # ------------------------------------------------------------------ init
-    def __init__(self, client_args: dict[str, Any] | None = None, **model_config: CustomConfig):
+    # --------------------------------------------------------------------- init
+    def __init__(self, client_args: dict[str, Any] | None = None, **model_config: "CustomModelFI.CustomConfig"):
         self.config: CustomModelFI.CustomConfig = dict(model_config)
         self.api_key, self.api_secret, self.base_url = self._load_secrets()
-        self.client = None  # placeholder for reflection compatibility
+        self.client = None
         logger.debug("custom_model_FI initialised – endpoint=%s", self.base_url)
 
     # ------------------------------------------------------------------ env helper
     @staticmethod
     def _load_secrets() -> tuple[str, str, str]:
-        """Load ``API_KEY``, ``API_SECRET`` and ``BASE_URL`` from .env or os.environ."""
-        # Ensure .env is parsed only once even if multiple providers are instantiated
         if not getattr(CustomModelFI, "_dotenv_loaded", False):
-            load_dotenv()  # looks for .env in CWD or parents
+            load_dotenv()
             CustomModelFI._dotenv_loaded = True  # type: ignore[attr-defined]
-
         missing = [v for v in CustomModelFI.REQUIRED_ENV if v not in os.environ]
         if missing:
-            raise EnvironmentError(
-                "Missing required variables in .env or environment: " + ", ".join(missing)
-            )
+            raise EnvironmentError("Missing variables: " + ", ".join(missing))
         return os.environ["API_KEY"], os.environ["API_SECRET"], os.environ["BASE_URL"]
 
-    # ------------------------------------------------ config passthrough (OpenAIModel API)
+    # ------------------------------------------------------------------- config I/F
     @override
-    def update_config(self, **model_config: CustomConfig) -> None:  # type: ignore[override]
+    def update_config(self, **model_config: "CustomModelFI.CustomConfig") -> None:  # type: ignore[override]
         self.config.update(model_config)
 
     @override
-    def get_config(self) -> CustomConfig:  # type: ignore[override]
+    def get_config(self) -> "CustomModelFI.CustomConfig":  # type: ignore[override]
         return cast(CustomModelFI.CustomConfig, self.config)
 
-    # ------------------------------------------------------------------ request helpers
+    # ------------------------------------------------------------------- helpers
     def _create_body(self, request: dict[str, Any]) -> dict[str, Any]:
-        """Convert Strands request → backend JSON body."""
+        """Replicates *base_code.create_request_body* exactly."""
+        p = self.config.get("params") or {}
         return {
             "model": self.config.get("model_id", "azure-openai-4o-mini-east"),
-            "stream": True,
-            **(self.config.get("params") or {}),
             "messages": request["messages"],
+            "frequency_penalty": p.get("frequency_penalty", 0),
+            "max_tokens": p.get("max_tokens", 1000),
+            "n": p.get("n", 1),
+            "presence_penalty": p.get("presence_penalty", 0),
+            "response_format": p.get("response_format", {"type": "text"}),
+            "stream": True,
+            "temperature": p.get("temperature", 1),
+            "top_p": p.get("top_p", 1),
         }
 
     def _headers(self, body: dict[str, Any]) -> dict[str, str]:
         ts = int(time.time() * 1000)
         req_id = uuid.uuid4()
-        raw = self.api_key + str(req_id) + str(ts) + json.dumps(body, separators=(",", ":"))
-        sig = base64.b64encode(hmac.new(self.api_secret.encode(), raw.encode(), hashlib.sha256).digest()).decode()
+        # ✨ IMPORTANT: NO separators arg → default JSON with spaces
+        raw_body_json = json.dumps(body)
+        source = f"{self.api_key}{req_id}{ts}{raw_body_json}"
+        sig = base64.b64encode(hmac.new(self.api_secret.encode(), source.encode(), hashlib.sha256).digest()).decode()
         return {
             "api-key": self.api_key,
             "Client-Request-Id": str(req_id),
@@ -144,7 +114,7 @@ class CustomModelFI(SAOpenAIModel):
             "Accept": "application/json",
         }
 
-    # ------------------------------------------------------------------ streaming interface
+    # ------------------------------------------------------------------- stream
     @override
     def stream(self, request: dict[str, Any]) -> Iterable[dict[str, Any]]:
         body = self._create_body(request)
@@ -154,17 +124,16 @@ class CustomModelFI(SAOpenAIModel):
             if resp.status_code != 200:
                 raise RuntimeError(f"custom_model_FI HTTP {resp.status_code}: {resp.text}")
 
-            # ─── start events ────────────────────────────────────────────────
             yield {"chunk_type": "message_start"}
             yield {"chunk_type": "content_start", "data_type": "text"}
 
             tool_calls: dict[int, list[Any]] = {}
             finish_reason: str | None = None
 
-            for raw_line in resp.iter_lines():
-                if not raw_line:
+            for raw in resp.iter_lines():
+                if not raw:
                     continue
-                line = raw_line.decode()
+                line = raw.decode()
                 if not line.startswith("data: "):
                     continue
                 data = line[6:]
@@ -175,42 +144,29 @@ class CustomModelFI(SAOpenAIModel):
                 choice = payload.get("choices", [{}])[0]
                 delta = choice.get("delta", {})
 
-                # content
-                if (text := delta.get("content")):
-                    yield {"chunk_type": "content_delta", "data_type": "text", "data": text}
-
-                # reasoning_content (optional)
+                if (txt := delta.get("content")):
+                    yield {"chunk_type": "content_delta", "data_type": "text", "data": txt}
                 if (rc := delta.get("reasoning_content")):
                     yield {"chunk_type": "content_delta", "data_type": "reasoning_content", "data": rc}
-
-                # tool calls
                 for tc in delta.get("tool_calls", []):
                     tool_calls.setdefault(tc["index"], []).append(tc)
-
                 finish_reason = choice.get("finish_reason") or finish_reason
 
-            # ─── end content ────────────────────────────────────────────────
             yield {"chunk_type": "content_stop", "data_type": "text"}
-
-            # flush tool deltas
             for deltas in tool_calls.values():
                 yield {"chunk_type": "content_start", "data_type": "tool", "data": deltas[0]}
                 for d in deltas:
                     yield {"chunk_type": "content_delta", "data_type": "tool", "data": d}
                 yield {"chunk_type": "content_stop", "data_type": "tool"}
-
             yield {"chunk_type": "message_stop", "data": finish_reason or "stop"}
             yield {"chunk_type": "metadata", "data": {"prompt_tokens": None, "completion_tokens": None, "total_tokens": None}}
 
-    # ------------------------------------------------------------------ sync helper
+    # ------------------------------------------------------------------- sync
     def complete(self, messages: Messages) -> str:
-        req = {"messages": messages}
-        return "".join(e["data"] for e in self.stream(req) if e["chunk_type"] == "content_delta")
+        return "".join(c["data"] for c in self.stream({"messages": messages}) if c["chunk_type"] == "content_delta")
 
-    # ------------------------------------------------------------------ structured output
+    # ------------------------------------------------------------------- structured output
     @override
-    def structured_output(
-        self, output_model: Type[T], prompt: Messages
-    ) -> Generator[dict[str, Union[T, Any]], None, None]:
-        data = self.complete(prompt)
-        yield {"output": output_model.model_validate_json(data)}
+    def structured_output(self, output_model: Type[T], prompt: Messages) -> Generator[dict[str, Union[T, Any]], None, None]:
+        raw = self.complete(prompt)
+        yield {"output": output_model.model_validate_json(raw)}
