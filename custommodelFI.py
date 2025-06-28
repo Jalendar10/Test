@@ -175,3 +175,42 @@ class CustomModelFI(SAOpenAIModel):
     def structured_output(self, output_model: Type[T], prompt: Messages) -> Generator[dict[str, Union[T, Any]], None, None]:
         raw = self.complete(prompt)
         yield {"output": output_model.model_validate_json(raw)}
+
+
+C:\Users\F41n1so\Downloads\MCP_Test>python weather\custom_model_FI_TEST.py
+Traceback (most recent call last):
+  File "C:\Users\F41n1so\Downloads\MCP_Test\weather\custom_model_FI_TEST.py", line 17, in <module>
+    response= agent("what is 2+2")
+              ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\F41n1so\Downloads\MCP_Test\venv\Lib\site-packages\strands\agent\agent.py", line 358, in __call__
+    result = self._run_loop(prompt, kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\F41n1so\Downloads\MCP_Test\venv\Lib\site-packages\strands\agent\agent.py", line 462, in _run_loop
+    return self._execute_event_loop_cycle(invocation_callback_handler, kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\F41n1so\Downloads\MCP_Test\venv\Lib\site-packages\strands\agent\agent.py", line 490, in _execute_event_loop_cycle
+    stop_reason, message, metrics, state = event_loop_cycle(
+                                           ^^^^^^^^^^^^^^^^^
+  File "C:\Users\F41n1so\Downloads\MCP_Test\venv\Lib\site-packages\strands\event_loop\event_loop.py", line 190, in event_loop_cycle
+    raise e
+  File "C:\Users\F41n1so\Downloads\MCP_Test\venv\Lib\site-packages\strands\event_loop\event_loop.py", line 148, in event_loop_cycle
+    stop_reason, message, usage, metrics, kwargs["request_state"] = stream_messages(
+                                                                    ^^^^^^^^^^^^^^^^
+  File "C:\Users\F41n1so\Downloads\MCP_Test\venv\Lib\site-packages\strands\event_loop\streaming.py", line 340, in stream_messages
+    return process_stream(chunks, callback_handler, messages, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\F41n1so\Downloads\MCP_Test\venv\Lib\site-packages\strands\event_loop\streaming.py", line 290, in process_stream
+    for chunk in chunks:
+                 ^^^^^^
+  File "C:\Users\F41n1so\Downloads\MCP_Test\venv\Lib\site-packages\strands\types\models\model.py", line 115, in converse
+    for event in response:
+                 ^^^^^^^^
+  File "C:\Users\F41n1so\Downloads\MCP_Test\venv\Lib\site-packages\strands\models\custom_model_FI.py", line 125, in stream
+    raise RuntimeError(f"custom_model_FI HTTP {resp.status_code}: {resp.text}")
+RuntimeError: custom_model_FI HTTP 404: {"fault":{"faultstring":"Requested resource cannot be found","detail":{"errorcode":"steps.apim.custom.ResourceNotFound"}}}
+
+C:\Users\F41n1so\Downloads\MCP_Test>
+
+
+
+    
