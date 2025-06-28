@@ -211,3 +211,85 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+
+testagent.py
+import json
+from agent_system import AgentSystem
+
+# Initialize the AgentSystem
+agent = AgentSystem()
+
+# Set the agent behavior
+behavior_data = "Assist with analyzing JSON data and answering questions about it."
+agent.set_behavior(behavior_data)
+
+# Load the JSON data from the first file
+json_file_1 = r"c:\Users\F41n1so\Downloads\Diligence_Application\diligence_apps_services.json"
+with open(json_file_1, "r", encoding="utf-8") as file1:
+    json_data_1 = json.load(file1)
+
+# Load the JSON data from the second file
+json_file_2 = r"c:\Users\F41n1so\Downloads\Diligence_Application\services_list.json"
+with open(json_file_2, "r", encoding="utf-8") as file2:
+    json_data_2 = json.load(file2)
+
+# Combine or process both JSON data as needed
+combined_data = {
+    "diligence_apps_services": json_data_1,
+    "services_list": json_data_2
+}
+
+# Pass the combined JSON data to the agent as a user message
+agent.memory.chat_memory.add_user_message(f"Combined JSON Data: {json.dumps(combined_data, indent=4)}")
+
+# Example: Ask a question about the combined JSON data
+user_question = "Can we approve or decline the application based on the provided data?"
+response = agent.process_user_input(user_question)
+
+# Print the response
+print("Agent Response:", response)
+
+
+C:\Users\F41n1so\Downloads\Diligence_Application\AgenticChatbotSystem_FINAL_COMPLETE\agent_system.py:6: LangChainDeprecationWarning: Please see the migration guide at: https://python.langchain.com/docs/versions/migrating_memory/
+  self.memory = ConversationBufferMemory(return_messages=True)
+Agent Response: I cannot provide that information.
+PS C:\Users\F41n1so\Downloads\Diligence_Application\AgenticChatbotSystem_FINAL_COMPLETE> python '.\test_agent copy.py'
+C:\Users\F41n1so\Downloads\Diligence_Application\AgenticChatbotSystem_FINAL_COMPLETE\agent_system.py:6: LangChainDeprecationWarning: Please see the migration guide at: https://python.langchain.com/docs/versions/migrating_memory/
+  self.memory = ConversationBufferMemory(return_messages=True)
+Agent Response: I cannot provide that information.
+PS C:\Users\F41n1so\Downloads\Diligence_Application\AgenticChatbotSystem_FINAL_COMPLETE> 
+ *  History restored 
+
+PS C:\Users\F41n1so\Downloads\Diligence_Application> python .\test_agent.py
+C:\Users\F41n1so\Downloads\Diligence_Application\agent_system.py:8: LangChainDeprecationWarning: Please see the migration guide at: https://python.langchain.com/docs/versions/migrating_memory/
+  self.memory = ConversationBufferMemory(return_messages=True)
+Agent Response: To determine whether to approve or decline the application based on the JSON data provided, we need to analyze the results from the various services listed in the "diligence_apps_services" section. Here are the key points from the data:
+
+1. **Positive Match Results:**
+   - **GLOBAL GNF** returned a result of "MATCH" with 5 total matches.
+   - **CLOVER OPEN BANK** also returned "MATCH".
+
+2. **Negative Match Results:**
+   - **MERCHANT MASTER MATCH** returned "NO MATCH".
+   - **RNF** returned "NO MATCH".
+   - **MATCH_RT** returned "NO MATCH".
+   - **ERNF** returned "NO MATCH".
+   - **DECISION** service returned "MANUAL REVIEW" indicating further review is required before a decision can be made.
+
+3. **Risk Assessment:**
+   - The **RISK** service provided a result of "152.0", but did not specify what this value means or how it should influence the decision.
+
+4. **Overall Status:**
+   - Most of the services have a "SUCCESS" status indicating they were processed correctly.
+   - However, multiple services returned "NO MATCH", which can signify potential risks or reasons to be cautious.
+
+### Recommended Action:
+- Given the mixed results (positive matches in some areas and "NO MATCH" in others), along with the manual review result, further investigation appears necessary before making a final decision.
+- If internal policies or an additional review process allow, you may consider temporarily approving the application while conducting a deeper evaluation of the flagged services and the manual review, especially given the positive match from the GNF and Clover services.
+
+### Conclusion:
+The application should not be outright approved or declined based solely on the current data. Instead, a manual review process is warranted to comprehensively analyze the red flags and positive indicators before reaching a final decision.
+PS C:\Users\F41n1so\Downloads\Diligence_Application> 
