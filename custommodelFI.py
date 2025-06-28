@@ -1,25 +1,26 @@
 """
-Strands-compatible provider: **custom_model_FI**
--------------------------------------------------
-Provides a drop‑in replacement for Strands’ ``OpenAIModel`` but signs every
-request with an **HMAC** scheme that must *exactly* match the reference
-implementation found in *base_code.py* (no custom JSON separators, identical
-body structure).
+Strands‑compatible provider: **custom_model_FI**
+================================================
+Drop‑in replacement for `strands.models.OpenAIModel` that sends requests to an
+internal HMAC‑secured endpoint.  The implementation reproduces **exactly** the
+signing logic from your `base_code.py`, so the server’s `HmacVerification`
+policy is satisfied.
 
-Key adjustments (2025‑06‑28)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-* **HMAC source string** now uses *default* ``json.dumps`` (includes spaces) —
-  this fixes ``steps.hmac.HmacVerificationFailed``.
-* Request body layout is **byte‑for‑byte** identical to *base_code.py*:
-  - ``frequency_penalty``
-  - ``presence_penalty``
-  - ``n``
-  - ``response_format``
-  - ``temperature`` / ``top_p``
-  - plus any overrides in ``params``.
-* The body is NOT re‑ordered or minified; insertion order is preserved.
+How it signs:
+-------------
+```
+source = API_KEY + request_id + timestamp + json.dumps(body)  # default dumps
+signature = base64(hmac.new(API_SECRET, source, SHA‑256).digest())
+```
+The JSON body layout and key order are byte‑for‑byte identical to
+`create_request_body()` in *base_code.py*.
 
-With these changes the backend should compute the same HMAC and return 200.
+Environment / .env variables required:
+```
+API_KEY    = ...
+API_SECRET = ...
+BASE_URL   = https://<company‑llm>/chat/completions
+```
 """
 
 from __future__ import annotations
@@ -47,22 +48,22 @@ T = TypeVar("T", bound=BaseModel)
 
 
 class CustomModelFI(SAOpenAIModel):
-    """Strands provider mirroring OpenAI but using company‑internal HMAC auth."""
+    """HMAC‑authenticated provider for Strands agents."""
 
+    # --------------------------------------------------------------------- constants
     REQUIRED_ENV = ("API_KEY", "API_SECRET", "BASE_URL")
 
     class CustomConfig(TypedDict, total=False):
         model_id: str
         params: dict[str, Any] | None
 
-    # --------------------------------------------------------------------- init
+    # --------------------------------------------------------------------- init / env
     def __init__(self, client_args: dict[str, Any] | None = None, **model_config: "CustomModelFI.CustomConfig"):
         self.config: CustomModelFI.CustomConfig = dict(model_config)
         self.api_key, self.api_secret, self.base_url = self._load_secrets()
-        self.client = None
+        self.client = None  # placeholder for reflection compatibility
         logger.debug("custom_model_FI initialised – endpoint=%s", self.base_url)
 
-    # ------------------------------------------------------------------ env helper
     @staticmethod
     def _load_secrets() -> tuple[str, str, str]:
         if not getattr(CustomModelFI, "_dotenv_loaded", False):
@@ -70,10 +71,10 @@ class CustomModelFI(SAOpenAIModel):
             CustomModelFI._dotenv_loaded = True  # type: ignore[attr-defined]
         missing = [v for v in CustomModelFI.REQUIRED_ENV if v not in os.environ]
         if missing:
-            raise EnvironmentError("Missing variables: " + ", ".join(missing))
+            raise EnvironmentError("Missing env vars: " + ", ".join(missing))
         return os.environ["API_KEY"], os.environ["API_SECRET"], os.environ["BASE_URL"]
 
-    # ------------------------------------------------------------------- config I/F
+    # --------------------------------------------------------------------- config API
     @override
     def update_config(self, **model_config: "CustomModelFI.CustomConfig") -> None:  # type: ignore[override]
         self.config.update(model_config)
@@ -82,11 +83,12 @@ class CustomModelFI(SAOpenAIModel):
     def get_config(self) -> "CustomModelFI.CustomConfig":  # type: ignore[override]
         return cast(CustomModelFI.CustomConfig, self.config)
 
-    # ------------------------------------------------------------------- helpers
+    # --------------------------------------------------------------------- helpers
     def _create_body(self, request: dict[str, Any]) -> dict[str, Any]:
-        """Replicates *base_code.create_request_body* exactly."""
+        """Construct JSON body **exactly** like base_code.create_request_body."""
         p = self.config.get("params") or {}
-        return {
+        body = {
+            # order matters for HMAC
             "model": self.config.get("model_id", "azure-openai-4o-mini-east"),
             "messages": request["messages"],
             "frequency_penalty": p.get("frequency_penalty", 0),
@@ -98,23 +100,25 @@ class CustomModelFI(SAOpenAIModel):
             "temperature": p.get("temperature", 1),
             "top_p": p.get("top_p", 1),
         }
+        return body
 
     def _headers(self, body: dict[str, Any]) -> dict[str, str]:
         ts = int(time.time() * 1000)
         req_id = uuid.uuid4()
-        # ✨ IMPORTANT: NO separators arg → default JSON with spaces
-        raw_body_json = json.dumps(body)
-        source = f"{self.api_key}{req_id}{ts}{raw_body_json}"
-        sig = base64.b64encode(hmac.new(self.api_secret.encode(), source.encode(), hashlib.sha256).digest()).decode()
+        body_json = json.dumps(body)  # default separators – includes spaces
+        source = f"{self.api_key}{req_id}{ts}{body_json}"
+        signature = base64.b64encode(
+            hmac.new(self.api_secret.encode(), source.encode(), hashlib.sha256).digest()
+        ).decode()
         return {
             "api-key": self.api_key,
             "Client-Request-Id": str(req_id),
             "Timestamp": str(ts),
-            "Authorization": sig,
+            "Authorization": signature,
             "Accept": "application/json",
         }
 
-    # ------------------------------------------------------------------- stream
+    # --------------------------------------------------------------------- streaming
     @override
     def stream(self, request: dict[str, Any]) -> Iterable[dict[str, Any]]:
         body = self._create_body(request)
@@ -161,66 +165,13 @@ class CustomModelFI(SAOpenAIModel):
             yield {"chunk_type": "message_stop", "data": finish_reason or "stop"}
             yield {"chunk_type": "metadata", "data": {"prompt_tokens": None, "completion_tokens": None, "total_tokens": None}}
 
-    # ------------------------------------------------------------------- sync
+    # --------------------------------------------------------------------- sync helper
     def complete(self, messages: Messages) -> str:
-        return "".join(c["data"] for c in self.stream({"messages": messages}) if c["chunk_type"] == "content_delta")
+        req = {"messages": messages}
+        return "".join(ev["data"] for ev in self.stream(req) if ev["chunk_type"] == "content_delta")
 
-    # ------------------------------------------------------------------- structured output
+    # --------------------------------------------------------------------- structured output
     @override
     def structured_output(self, output_model: Type[T], prompt: Messages) -> Generator[dict[str, Union[T, Any]], None, None]:
         raw = self.complete(prompt)
         yield {"output": output_model.model_validate_json(raw)}
-
-
-calling
-from strands import Agent
-from strands.models.custom_model_FI import CustomModelFI
-from strands_tools import calculator
-
-model = CustomModelFI(
-   
-    model_id="azure-openai-4o-mini-east",       # ✅ matches your backend model ID
-        params={
-            "temperature": 0.7,
-            "max_tokens": 500
-        }
-    )
-    
-agent = Agent(
-    model=model,tools=[calculator])
-
-response= agent("what is 2+2")
-print(response)        
-error
-PS C:\Users\F41n1so\Downloads\MCP_Test> & c:/Users/F41n1so/Downloads/MCP_Test/venv/Scripts/python.exe c:/Users/F41n1so/Downloads/MCP_Test/weather/custom_model_FI_TEST.py
-Traceback (most recent call last):
-  File "c:\Users\F41n1so\Downloads\MCP_Test\weather\custom_model_FI_TEST.py", line 17, in <module>
-    response= agent("what is 2+2")
-              ^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\F41n1so\Downloads\MCP_Test\venv\Lib\site-packages\strands\agent\agent.py", line 358, in __call__
-    result = self._run_loop(prompt, kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\F41n1so\Downloads\MCP_Test\venv\Lib\site-packages\strands\agent\agent.py", line 462, in _run_loop
-    return self._execute_event_loop_cycle(invocation_callback_handler, kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\F41n1so\Downloads\MCP_Test\venv\Lib\site-packages\strands\agent\agent.py", line 490, in _execute_event_loop_cycle
-    stop_reason, message, metrics, state = event_loop_cycle(
-                                           ^^^^^^^^^^^^^^^^^
-  File "C:\Users\F41n1so\Downloads\MCP_Test\venv\Lib\site-packages\strands\event_loop\event_loop.py", line 190, in event_loop_cycle
-    raise e
-  File "C:\Users\F41n1so\Downloads\MCP_Test\venv\Lib\site-packages\strands\event_loop\event_loop.py", line 148, in event_loop_cycle
-    stop_reason, message, usage, metrics, kwargs["request_state"] = stream_messages(
-                                                                    ^^^^^^^^^^^^^^^^
-  File "C:\Users\F41n1so\Downloads\MCP_Test\venv\Lib\site-packages\strands\event_loop\streaming.py", line 340, in stream_messages
-    return process_stream(chunks, callback_handler, messages, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\F41n1so\Downloads\MCP_Test\venv\Lib\site-packages\strands\event_loop\streaming.py", line 290, in process_stream
-    for chunk in chunks:
-                 ^^^^^^
-  File "C:\Users\F41n1so\Downloads\MCP_Test\venv\Lib\site-packages\strands\types\models\model.py", line 115, in converse
-    for event in response:
-                 ^^^^^^^^
-  File "C:\Users\F41n1so\Downloads\MCP_Test\venv\Lib\site-packages\strands\models\custom_model_FI.py", line 125, in stream
-    raise RuntimeError(f"custom_model_FI HTTP {resp.status_code}: {resp.text}")
-RuntimeError: custom_model_FI HTTP 404: {"fault":{"faultstring":"Requested resource cannot be found","detail":{"errorcode":"steps.apim.custom.ResourceNotFound"}}}
-PS C:\Users\F41n1so\Downloads\MCP_Test> 
