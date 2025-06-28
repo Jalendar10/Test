@@ -1,184 +1,213 @@
-"""
-Strands-compatible provider: **custom_model_FI**
--------------------------------------------------
-Same interface as Strands’ built‑in ``OpenAIModel`` but proxies requests to a
-company‑internal LLM endpoint that is secured with an HMAC signature.
 
-🔑 **Secrets** are pulled from a local ``.env`` file (via *python‑dotenv*) so you
-can run the agent without exporting environment variables every time.
 
-Key features
-~~~~~~~~~~~~
-* Reads ``API_KEY``, ``API_SECRET``, ``BASE_URL`` from **.env** automatically.
-* Streaming Server‑Sent‑Events → Strands chunk sequence (`message_start`, …).
-* Supports `tool_calls`, `reasoning_content`, and propagates `finish_reason`.
-* Provides ``complete()`` (blocking) and ``structured_output()`` helpers.
-* Drop‑in provider name: **custom_model_FI** (declared in entry‑points).
-"""
+#basecode
 
-from __future__ import annotations
-
+import os
+import uuid
+import json
 import base64
 import hashlib
 import hmac
-import json
-import logging
-import os
-import time
-import uuid
-from typing import Any, Generator, Iterable, Type, TypeVar, Union, cast, TypedDict
-
 import requests
+import time
 from dotenv import load_dotenv
-from pydantic import BaseModel
-from typing_extensions import override
+from langchain.memory import ConversationBufferMemory
+from langchain.schema import HumanMessage, AIMessage
 
-from strands.types.content import Messages
-from strands.types.models import OpenAIModel as SAOpenAIModel
+def load_environment():
+    load_dotenv()
+    api_key = os.getenv("API_KEY")
+    api_secret = os.getenv("API_SECRET")
+    base_url = os.getenv("BASE_URL")
 
-logger = logging.getLogger(__name__)
-T = TypeVar("T", bound=BaseModel)
+    if not api_key or not api_secret or not base_url:
+        raise ValueError("Missing one or more environment variables: API_KEY, API_SECRET, BASE_URL")
+
+    return api_key, api_secret, base_url
+
+def create_request_body(conversation_messages, agent_behavior):
+    # Include the agent behavior as a system message
+    serialized_messages = [
+        {
+            "role": "system",
+            "content": agent_behavior
+        }
+    ] + [
+        {
+            "role": "user" if isinstance(message, HumanMessage) else "assistant",
+            "content": message.content
+        }
+        for message in conversation_messages
+    ]
+    return {
+        "model": "azure-openai-4o-mini-east",
+        "messages": serialized_messages,
+        "frequency_penalty": 0,
+        "max_tokens": 1000,
+        "n": 1,
+        "presence_penalty": 0,
+        "response_format": {"type": "text"},
+        "stream": True,
+        "temperature": 1,
+        "top_p": 1
+    }
+
+def create_hmac_signature(request_body, api_key, api_secret, timestamp, request_id):
+    hmac_source_data = api_key + str(request_id) + str(timestamp) + json.dumps(request_body)
+    computed_hash = hmac.new(api_secret.encode(), hmac_source_data.encode(), hashlib.sha256)
+    return base64.b64encode(computed_hash.digest()).decode()
+
+def send_request(request_body, hmac_signature, base_url, api_key, timestamp, request_id):
+    headers = {
+        "api-key": api_key,
+        "Client-Request-Id": str(request_id),
+        "Timestamp": str(timestamp),
+        "Authorization": hmac_signature,
+        "Accept": "application/json",
+    }
+    response = requests.post(base_url, headers=headers, json=request_body, stream=True)
+
+    if response.status_code != 200:
+        raise ValueError(f"Error: Received status code {response.status_code}\nResponse content: {response.content}")
+
+    full_response = ""
+    for line in response.iter_lines():
+        if line:
+            decoded_line = line.decode('utf-8')
+            if decoded_line.startswith("data: "):
+                data = decoded_line[len("data: "):]
+                if data != "[DONE]":
+                    json_data = json.loads(data)
+                    choices = json_data.get("choices", [])
+                    if choices:
+                        full_response += choices[0].get("delta", {}).get("content", "")
+
+    return {"choices": [{"message": {"content": full_response}}]}
+
+def process_request(messages, agent_behavior):
+    api_key, api_secret, base_url = load_environment()
+    request_body = create_request_body(messages, agent_behavior)
+    timestamp = int(time.time() * 1000)
+    request_id = uuid.uuid4()
+    hmac_signature = create_hmac_signature(request_body, api_key, api_secret, timestamp, request_id)
+    response = send_request(request_body, hmac_signature, base_url, api_key, timestamp, request_id)
+    return response['choices'][0]['message']['content']
 
 
-class CustomModelFI(SAOpenAIModel):
-    """Strands provider that mirrors the OpenAI API while using a custom backend."""
 
-    # ------------------------------------------------------------------ static
-    REQUIRED_ENV = ("API_KEY", "API_SECRET", "BASE_URL")
 
-    class CustomConfig(TypedDict, total=False):
-        """Model configuration accepted by CustomModelFI.
+from langchain.memory import ConversationBufferMemory
+import base_code
 
-        Mirrors the keys used by the OpenAI provider so existing YAML
-        or Python configs continue to work.
+class AgentSystem:
+    def __init__(self):
+        self.memory = ConversationBufferMemory(return_messages=True)
+        self.agent_behavior = ""
+        self.restricted_content = ""  # To store the restricted content
+
+    def set_behavior(self, behavior_data):
         """
+        Process the collected data to set the agent behavior.
+        Add a restriction to limit the agent's responses to the given content.
+        """
+        self.agent_behavior = behavior_data
+        self.restricted_content = (
+            "You are strictly limited to the provided content. "
+            "Do not answer any questions or provide information outside of this context. "
+            "Do not assume or expand abbreviations unless explicitly provided in the given data. "
+            "you are not allowed to provide any information that is not present in the provided content which includes the abbreviations or full forms. "
+            "If the information is not present, respond with 'I cannot provide that information.'"
+            "you have right to take decisions based on the provided content. "
+        )
 
-        model_id: str
-        params: dict[str, Any] | None
-        """No extra keys; inherits ``model_id`` & ``params`` semantics."""
+    def process_user_input(self, user_input):
+        """
+        Process user input and generate a response based on memory and agent behavior.
+        Ensure the response is restricted to the given content.
+        """
+        # Add user message to memory
+        self.memory.chat_memory.add_user_message(user_input)
 
-    # ------------------------------------------------------------------ init
-    def __init__(self, client_args: dict[str, Any] | None = None, **model_config: CustomConfig):
-        self.config: CustomModelFI.CustomConfig = dict(model_config)
-        self.api_key, self.api_secret, self.base_url = self._load_secrets()
-        self.client = None  # placeholder for reflection compatibility
-        logger.debug("custom_model_FI initialised – endpoint=%s", self.base_url)
+        # Generate a response based on memory and agent behavior
+        response = ""
+        try:
+            # Combine the restricted content with the agent behavior
+            combined_behavior = f"{self.agent_behavior}"
+            base_response = base_code.process_request(self.memory.chat_memory.messages, combined_behavior)
+            response += base_response
+        except ValueError as e:
+            response += f"Error processing request: {e}"
 
-    # ------------------------------------------------------------------ env helper
-    @staticmethod
-    def _load_secrets() -> tuple[str, str, str]:
-        """Load ``API_KEY``, ``API_SECRET`` and ``BASE_URL`` from .env or os.environ."""
-        # Ensure .env is parsed only once even if multiple providers are instantiated
-        if not getattr(CustomModelFI, "_dotenv_loaded", False):
-            load_dotenv()  # looks for .env in CWD or parents
-            CustomModelFI._dotenv_loaded = True  # type: ignore[attr-defined]
+        # Add the response to memory
+        self.memory.chat_memory.add_ai_message(response)
 
-        missing = [v for v in CustomModelFI.REQUIRED_ENV if v not in os.environ]
-        if missing:
-            raise EnvironmentError(
-                "Missing required variables in .env or environment: " + ", ".join(missing)
-            )
-        return os.environ["API_KEY"], os.environ["API_SECRET"], os.environ["BASE_URL"]
+        return response
+#agent_code.py
+from langchain.memory import ConversationBufferMemory
+import base_code
+import warnings
 
-    # ------------------------------------------------ config passthrough (OpenAIModel API)
-    @override
-    def update_config(self, **model_config: CustomConfig) -> None:  # type: ignore[override]
-        self.config.update(model_config)
+# Ignore all warnings
+warnings.filterwarnings("ignore")
+class AgentSystem:
+    def __init__(self):
+        self.memory = ConversationBufferMemory(return_messages=True)
+        self.agent_behavior = ""
 
-    @override
-    def get_config(self) -> CustomConfig:  # type: ignore[override]
-        return cast(CustomModelFI.CustomConfig, self.config)
+    def set_behavior(self, behavior_data):
+        # Process the collected data to set the agent behavior
+        self.agent_behavior = behavior_data
+        print(f"Agent behavior set to: {self.agent_behavior}")
 
-    # ------------------------------------------------------------------ request helpers
-    def _create_body(self, request: dict[str, Any]) -> dict[str, Any]:
-        """Convert Strands request → backend JSON body."""
-        return {
-            "model": self.config.get("model_id", "azure-openai-4o-mini-east"),
-            "stream": True,
-            **(self.config.get("params") or {}),
-            "messages": request["messages"],
-        }
+    def process_user_input(self, user_input):
+        # Add user message to memory
+        self.memory.chat_memory.add_user_message(user_input)
 
-    def _headers(self, body: dict[str, Any]) -> dict[str, str]:
-        ts = int(time.time() * 1000)
-        req_id = uuid.uuid4()
-        raw = self.api_key + str(req_id) + str(ts) + json.dumps(body, separators=(",", ":"))
-        sig = base64.b64encode(hmac.new(self.api_secret.encode(), raw.encode(), hashlib.sha256).digest()).decode()
-        return {
-            "api-key": self.api_key,
-            "Client-Request-Id": str(req_id),
-            "Timestamp": str(ts),
-            "Authorization": sig,
-            "Accept": "application/json",
-        }
+        # Generate a response based on memory and agent behavior
+        response = ""
+        try:
+            base_response = base_code.process_request(self.memory.chat_memory.messages, self.agent_behavior)
+            response += base_response
+        except ValueError as e:
+            response += f"Error processing request: {e}"
 
-    # ------------------------------------------------------------------ streaming interface
-    @override
-    def stream(self, request: dict[str, Any]) -> Iterable[dict[str, Any]]:
-        body = self._create_body(request)
-        headers = self._headers(body)
+        # Add the response to memory
+        self.memory.chat_memory.add_ai_message(response)
 
-        with requests.post(self.base_url, json=body, headers=headers, stream=True, timeout=120) as resp:
-            if resp.status_code != 200:
-                raise RuntimeError(f"custom_model_FI HTTP {resp.status_code}: {resp.text}")
+        return response
 
-            # ─── start events ────────────────────────────────────────────────
-            yield {"chunk_type": "message_start"}
-            yield {"chunk_type": "content_start", "data_type": "text"}
+def main():
+    print("Welcome to the Agent System!")
 
-            tool_calls: dict[int, list[Any]] = {}
-            finish_reason: str | None = None
+    # Initialize memory for the agent
+    memory = ConversationBufferMemory(return_messages=True)
 
-            for raw_line in resp.iter_lines():
-                if not raw_line:
-                    continue
-                line = raw_line.decode()
-                if not line.startswith("data: "):
-                    continue
-                data = line[6:]
-                if data == "[DONE]":
-                    break
+    # Ask the user how the agent should act
+    agent_behavior = input("Please specify how the agent should act: ")
+    print(f"Agent will act as: {agent_behavior}")
 
-                payload = json.loads(data)
-                choice = payload.get("choices", [{}])[0]
-                delta = choice.get("delta", {})
+    while True:
+        user_input = input("You: ")
+        if user_input.lower() in ["exit", "quit"]:
+            print("Exiting the agent system. Goodbye!")
+            break
 
-                # content
-                if (text := delta.get("content")):
-                    yield {"chunk_type": "content_delta", "data_type": "text", "data": text}
+        # Add user message to memory
+        memory.chat_memory.add_user_message(user_input)
 
-                # reasoning_content (optional)
-                if (rc := delta.get("reasoning_content")):
-                    yield {"chunk_type": "content_delta", "data_type": "reasoning_content", "data": rc}
+        # Generate a response based on memory and agent behavior
+        response = ""
 
-                # tool calls
-                for tc in delta.get("tool_calls", []):
-                    tool_calls.setdefault(tc["index"], []).append(tc)
+        try:
+            base_response = base_code.process_request(memory.chat_memory.messages, agent_behavior)
+            response += base_response
+        except ValueError as e:
+            response += f"Error processing request: {e}"
 
-                finish_reason = choice.get("finish_reason") or finish_reason
+        print(f"Agent Response: {response}")
 
-            # ─── end content ────────────────────────────────────────────────
-            yield {"chunk_type": "content_stop", "data_type": "text"}
+        # Add the response to memory
+        memory.chat_memory.add_ai_message(response)
 
-            # flush tool deltas
-            for deltas in tool_calls.values():
-                yield {"chunk_type": "content_start", "data_type": "tool", "data": deltas[0]}
-                for d in deltas:
-                    yield {"chunk_type": "content_delta", "data_type": "tool", "data": d}
-                yield {"chunk_type": "content_stop", "data_type": "tool"}
-
-            yield {"chunk_type": "message_stop", "data": finish_reason or "stop"}
-            yield {"chunk_type": "metadata", "data": {"prompt_tokens": None, "completion_tokens": None, "total_tokens": None}}
-
-    # ------------------------------------------------------------------ sync helper
-    def complete(self, messages: Messages) -> str:
-        req = {"messages": messages}
-        return "".join(e["data"] for e in self.stream(req) if e["chunk_type"] == "content_delta")
-
-    # ------------------------------------------------------------------ structured output
-    @override
-    def structured_output(
-        self, output_model: Type[T], prompt: Messages
-    ) -> Generator[dict[str, Union[T, Any]], None, None]:
-        data = self.complete(prompt)
-        yield {"output": output_model.model_validate_json(data)}
+if __name__ == "__main__":
+    main()
