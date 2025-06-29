@@ -1,0 +1,4 @@
+API_KEY = "YGXZ0EJ82DYAHJeyZ5MAyxqIHplEADSroxnOSRu9FyG7jg4w"
+API_SECRET = "gwiwIZiSjQTHrYs8wMg2OHm1p6iZvwCBuH2x1xBFXcHAOdcFNYKVPcyn67h4O33P"
+BASE_URL = "https://connect-wan.fiservapis.com/ai-gateway/v1/chat/completions"
+BASE_URL_1 = "https://gateway.onefiserv.net/chat/completions"
