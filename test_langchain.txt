@@ -1,0 +1,9 @@
+(venv) C:\Users\F41n1so\Downloads\Diligence_Application\langchain_testing>python invoke_custom_model.py
+Traceback (most recent call last):
+  File "C:\Users\F41n1so\Downloads\Diligence_Application\langchain_testing\invoke_custom_model.py", line 4, in <module>
+    from base_code import CustomModel, parse_tool_calls
+  File "C:\Users\F41n1so\Downloads\Diligence_Application\langchain_testing\base_code.py", line 11, in <module>
+    from langchain.schema import HumanMessage, AIMessage, ToolMessage
+ImportError: cannot import name 'ToolMessage' from 'langchain.schema' (C:\Users\F41n1so\AppData\Roaming\Python\Python312\site-packages\langchain\schema\__init__.py). Did you mean: 'BaseMessage'?
+
+(venv) C:\Users\F41n1so\Downloads\Diligence_Application\langchain_testing>
